@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Form, Button, Table, Alert, Card, Spinner, Modal } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Form, Button, Table, Alert, Card, Spinner, Modal, Badge, Row, Col } from 'react-bootstrap';
 
 const AvailabilitySearch = () => {
-  const [symptom, setSymptom] = useState('');
+  const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [allSymptoms, setAllSymptoms] = useState([]);
+  const [symptomSearch, setSymptomSearch] = useState('');
   const [condition, setCondition] = useState('');
   const [specialty, setSpecialty] = useState('');
-  const [patientId, setPatientId] = useState(''); // Assuming patient ID is available
+  const [patientId, setPatientId] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
   const [selectedClinician, setSelectedClinician] = useState(null);
@@ -13,6 +15,21 @@ const AvailabilitySearch = () => {
   const [error, setError] = useState('');
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [clinicianSymptoms, setClinicianSymptoms] = useState({});
+
+  // Load all symptoms on mount
+  useEffect(() => {
+    const loadSymptoms = async () => {
+      try {
+        const response = await fetch('/api/symptoms');
+        const data = await response.json();
+        setAllSymptoms(data);
+      } catch (err) {
+        console.error('Error loading symptoms:', err);
+      }
+    };
+    loadSymptoms();
+  }, []);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -20,13 +37,34 @@ const AvailabilitySearch = () => {
     setError('');
     
     try {
-      const response = await fetch(`/api/search-clinicians?symptom=${encodeURIComponent(symptom)}&condition=${encodeURIComponent(condition)}&specialty=${encodeURIComponent(specialty)}`);
+      // Use new symptom-based search endpoint
+      const response = await fetch('/api/clinicians/search-by-symptoms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symptoms: selectedSymptoms,
+        }),
+      });
       const data = await response.json();
       
-      if (data.results) {
+      if (data.results && data.results.length > 0) {
         setSearchResults(data.results);
+        // Fetch symptoms for each clinician
+        const symptomsMap = {};
+        for (const clinician of data.results) {
+          try {
+            const sympResponse = await fetch(`/api/clinicians/${clinician.id}/symptoms`);
+            const sympData = await sympResponse.json();
+            symptomsMap[clinician.id] = sympData.symptoms || [];
+          } catch (err) {
+            console.error(`Error loading symptoms for clinician ${clinician.id}:`, err);
+          }
+        }
+        setClinicianSymptoms(symptomsMap);
       } else {
-        setError('No clinicians found matching your criteria.');
+        setError('No clinicians found matching your symptoms.');
       }
     } catch (err) {
       setError('Error searching for clinicians. Please try again.');
@@ -34,6 +72,14 @@ const AvailabilitySearch = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleSymptom = (symptomName) => {
+    setSelectedSymptoms(prev => 
+      prev.includes(symptomName) 
+        ? prev.filter(s => s !== symptomName)
+        : [...prev, symptomName]
+    );
   };
 
   const handleViewAvailability = async (clinicianId) => {
@@ -84,8 +130,8 @@ const AvailabilitySearch = () => {
           booking_date: selectedClinician.date,
           booking_time: '09:00:00', // This would come from the slot in a real implementation
           duration_minutes: 30,
-          symptoms_reported: [symptom],
-          consultation_reason: `Patient presenting with ${symptom}`
+          symptoms_reported: selectedSymptoms,
+          consultation_reason: `Patient presenting with: ${selectedSymptoms.join(', ')}`
         }),
       });
       
@@ -124,17 +170,46 @@ const AvailabilitySearch = () => {
           </Form.Group>
           
           <Form.Group className="mb-3">
-            <Form.Label>Symptom</Form.Label>
+            <Form.Label>Select Symptoms</Form.Label>
             <Form.Control 
               type="text" 
-              value={symptom}
-              onChange={(e) => setSymptom(e.target.value)}
-              placeholder="e.g., Headache, Fever, Cough"
+              value={symptomSearch}
+              onChange={(e) => setSymptomSearch(e.target.value)}
+              placeholder="Type to filter symptoms..."
+              disabled={loading}
             />
+            <div style={{ 
+              maxHeight: '200px', 
+              overflowY: 'auto', 
+              border: '1px solid #dee2e6', 
+              borderRadius: '0.25rem',
+              marginTop: '0.5rem',
+              padding: '0.5rem'
+            }}>
+              {allSymptoms
+                .filter(s => s.name.toLowerCase().includes(symptomSearch.toLowerCase()))
+                .map((symptom) => (
+                  <Badge 
+                    key={symptom.id}
+                    bg={selectedSymptoms.includes(symptom.name) ? 'success' : 'secondary'}
+                    pill
+                    style={{ margin: '0.25rem', cursor: 'pointer', fontSize: '0.9rem' }}
+                    onClick={() => toggleSymptom(symptom.name)}
+                  >
+                    {symptom.name} {selectedSymptoms.includes(symptom.name) ? '✓' : ''}
+                  </Badge>
+                ))
+              }
+            </div>
+            {selectedSymptoms.length > 0 && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#6c757d' }}>
+                Selected: {selectedSymptoms.join(', ')}
+              </div>
+            )}
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label>Medical Condition</Form.Label>
+            <Form.Label>Medical Condition (optional)</Form.Label>
             <Form.Control 
               type="text" 
               value={condition}
@@ -144,12 +219,12 @@ const AvailabilitySearch = () => {
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label>Specialty</Form.Label>
+            <Form.Label>Specialty (optional)</Form.Label>
             <Form.Select 
               value={specialty}
               onChange={(e) => setSpecialty(e.target.value)}
             >
-              <option value="">Select a specialty</option>
+              <option value="">Any specialty</option>
               <option value="General Practice">General Practice</option>
               <option value="Cardiology">Cardiology</option>
               <option value="Dermatology">Dermatology</option>
@@ -160,7 +235,7 @@ const AvailabilitySearch = () => {
             </Form.Select>
           </Form.Group>
 
-          <Button type="submit" variant="primary" disabled={loading || !patientId}>
+          <Button type="submit" variant="primary" disabled={loading || !patientId || selectedSymptoms.length === 0}>
             {loading ? (
               <>
                 <Spinner
@@ -172,7 +247,7 @@ const AvailabilitySearch = () => {
                 /> Searching...
               </>
             ) : (
-              'Search Availability'
+              'Search Clinicians'
             )}
           </Button>
         </Form>
@@ -185,22 +260,33 @@ const AvailabilitySearch = () => {
 
         {searchResults.length > 0 && (
           <div className="mt-4">
-            <h3>Available Clinicians ({searchResults.length})</h3>
+            <h3>Clinicians Matching Your Symptoms ({searchResults.length})</h3>
             <Table striped bordered hover>
               <thead>
                 <tr>
                   <th>Clinician</th>
                   <th>Specialty</th>
                   <th>Rating</th>
+                  <th>They Treat</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {searchResults.map((clinician) => (
                   <tr key={clinician.id}>
-                    <td>{clinician.name}</td>
+                    <td><strong>{clinician.name}</strong></td>
                     <td>{clinician.specialty}</td>
-                    <td>{clinician.rating} ★</td>
+                    <td>{clinician.rating ? `${clinician.rating} ★` : 'N/A'}</td>
+                    <td>
+                      {clinicianSymptoms[clinician.id]?.slice(0, 3).map((s, idx) => (
+                        <Badge bg="info" key={idx} style={{ margin: '0.1rem' }}>{s}</Badge>
+                      ))}
+                      {clinicianSymptoms[clinician.id]?.length > 3 && (
+                        <Badge bg="light" text="dark" style={{ margin: '0.1rem' }}>
+                          +{clinicianSymptoms[clinician.id].length - 3} more
+                        </Badge>
+                      )}
+                    </td>
                     <td>
                       <Button 
                         variant="outline-primary" 

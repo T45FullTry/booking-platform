@@ -8,6 +8,7 @@ import HomePage from './components/HomePage';
 import BookingForm from './components/BookingForm';
 import AvailabilitySearch from './components/AvailabilitySearch';
 import VoiceBooking from './components/VoiceBooking';
+import ServiceSearch from './components/ServiceSearch';
 
 function App() {
   return (
@@ -19,7 +20,8 @@ function App() {
             <Nav className="me-auto">
               <Nav.Link href="/">Home</Nav.Link>
               <Nav.Link href="/book">Book Appointment</Nav.Link>
-              <Nav.Link href="/search">Search Availability</Nav.Link>
+              <Nav.Link href="/search">Search Clinicians</Nav.Link>
+              <Nav.Link href="/services">Find Services</Nav.Link>
               <Nav.Link href="/voice">Voice Booking</Nav.Link>
             </Nav>
           </Container>
@@ -30,6 +32,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/book" element={<BookingForm />} />
             <Route path="/search" element={<AvailabilitySearch />} />
+            <Route path="/services" element={<ServiceSearch />} />
             <Route path="/voice" element={<VoiceBooking />} />
           </Routes>
         </Container>
