@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
-import { Form, Button, Table, Alert, Card, Spinner } from 'react-bootstrap';
+import { Form, Button, Table, Alert, Card, Spinner, Modal } from 'react-bootstrap';
 
 const AvailabilitySearch = () => {
   const [symptom, setSymptom] = useState('');
   const [condition, setCondition] = useState('');
   const [specialty, setSpecialty] = useState('');
+  const [patientId, setPatientId] = useState(''); // Assuming patient ID is available
   const [searchResults, setSearchResults] = useState([]);
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [selectedClinician, setSelectedClinician] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -24,8 +29,78 @@ const AvailabilitySearch = () => {
         setError('No clinicians found matching your criteria.');
       }
     } catch (err) {
-      setError('Error searching for availability. Please try again.');
+      setError('Error searching for clinicians. Please try again.');
       console.error('Search error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewAvailability = async (clinicianId) => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // For demo purposes, using today's date
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/availability?clinician_id=${clinicianId}&date=${today}&patient_id=${patientId}`);
+      const data = await response.json();
+      
+      if (data.slots) {
+        setAvailabilitySlots(data.slots);
+        const clinician = searchResults.find(c => c.id === clinicianId);
+        setSelectedClinician({...clinician, date: today});
+      } else {
+        setError('No availability found for this clinician.');
+      }
+    } catch (err) {
+      setError('Error fetching availability. Please try again.');
+      console.error('Availability error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBookAppointment = async (slotId) => {
+    setSelectedSlot(slotId);
+    setShowBookingModal(true);
+  };
+
+  const confirmBooking = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          patient_id: patientId,
+          clinician_id: selectedClinician.id,
+          service_id: '00000000-0000-0000-0000-000000000000', // Default service ID
+          availability_slot_id: selectedSlot,
+          booking_date: selectedClinician.date,
+          booking_time: '09:00:00', // This would come from the slot in a real implementation
+          duration_minutes: 30,
+          symptoms_reported: [symptom],
+          consultation_reason: `Patient presenting with ${symptom}`
+        }),
+      });
+      
+      if (response.ok) {
+        setShowBookingModal(false);
+        // Refresh availability to show updated slots
+        handleViewAvailability(selectedClinician.id);
+        alert('Appointment booked successfully!');
+      } else {
+        const errorData = await response.json();
+        setError(`Booking failed: ${errorData}`);
+      }
+    } catch (err) {
+      setError('Error booking appointment. Please try again.');
+      console.error('Booking error:', err);
     } finally {
       setLoading(false);
     }
@@ -38,6 +113,16 @@ const AvailabilitySearch = () => {
       </Card.Header>
       <Card.Body>
         <Form onSubmit={handleSearch}>
+          <Form.Group className="mb-3">
+            <Form.Label>Patient ID</Form.Label>
+            <Form.Control 
+              type="text" 
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              placeholder="Enter patient ID"
+            />
+          </Form.Group>
+          
           <Form.Group className="mb-3">
             <Form.Label>Symptom</Form.Label>
             <Form.Control 
@@ -75,7 +160,7 @@ const AvailabilitySearch = () => {
             </Form.Select>
           </Form.Group>
 
-          <Button type="submit" variant="primary" disabled={loading}>
+          <Button type="submit" variant="primary" disabled={loading || !patientId}>
             {loading ? (
               <>
                 <Spinner
@@ -106,7 +191,6 @@ const AvailabilitySearch = () => {
                 <tr>
                   <th>Clinician</th>
                   <th>Specialty</th>
-                  <th>Available Times</th>
                   <th>Rating</th>
                   <th>Action</th>
                 </tr>
@@ -116,20 +200,46 @@ const AvailabilitySearch = () => {
                   <tr key={clinician.id}>
                     <td>{clinician.name}</td>
                     <td>{clinician.specialty}</td>
-                    <td>
-                      {clinician.available_times.slice(0, 3).map((time, idx) => (
-                        <div key={idx}>{time}</div>
-                      ))}
-                      {clinician.available_times.length > 3 && (
-                        <div>+{clinician.available_times.length - 3} more</div>
-                      )}
-                    </td>
                     <td>{clinician.rating} ★</td>
                     <td>
                       <Button 
                         variant="outline-primary" 
                         size="sm"
-                        href={`/book?clinician=${clinician.id}`}
+                        onClick={() => handleViewAvailability(clinician.id)}
+                        disabled={!patientId}
+                      >
+                        View Availability
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        )}
+
+        {availabilitySlots.length > 0 && selectedClinician && (
+          <div className="mt-4">
+            <h3>Availability for {selectedClinician.name} on {selectedClinician.date}</h3>
+            <Table striped bordered hover>
+              <thead>
+                <tr>
+                  <th>Time Slot</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availabilitySlots.map((slot) => (
+                  <tr key={slot.id}>
+                    <td>{slot.start_time} - {slot.end_time}</td>
+                    <td>{slot.available ? 'Available' : 'Reserved'}</td>
+                    <td>
+                      <Button 
+                        variant="success" 
+                        size="sm"
+                        onClick={() => handleBookAppointment(slot.id)}
+                        disabled={!slot.available}
                       >
                         Book
                       </Button>
@@ -140,6 +250,24 @@ const AvailabilitySearch = () => {
             </Table>
           </div>
         )}
+
+        {/* Booking Confirmation Modal */}
+        <Modal show={showBookingModal} onHide={() => setShowBookingModal(false)}>
+          <Modal.Header closeButton>
+            <Modal.Title>Confirm Booking</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            Are you sure you want to book this appointment with {selectedClinician?.name}?
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowBookingModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={confirmBooking} disabled={loading}>
+              {loading ? 'Booking...' : 'Confirm Booking'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
       </Card.Body>
     </Card>
   );

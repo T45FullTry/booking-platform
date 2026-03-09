@@ -40,7 +40,17 @@ async fn main() -> std::io::Result<()> {
                         web::scope("/clinicians")
                             .route("/search", web::get().to(handlers::search_clinicians))
                             .route("/search-db", web::get().to(handlers::search_clinicians_db))
+                            .route("/search-by-symptoms", web::post().to(handlers::search_clinicians_by_symptoms))
                             .route("/{id}", web::get().to(handlers::get_clinician))
+                            .route("/{id}/symptoms", web::get().to(handlers::get_clinician_symptoms_handler))
+                    )
+                    .service(
+                        web::scope("/services")
+                            .route("/by-symptoms", web::post().to(handlers::get_services_by_symptoms))
+                    )
+                    .service(
+                        web::scope("/symptoms")
+                            .route("", web::get().to(handlers::get_all_symptoms))
                     )
             )
     })

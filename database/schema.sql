@@ -78,6 +78,20 @@ CREATE TABLE symptom_conditions (
     PRIMARY KEY (symptom_id, condition_id)
 );
 
+-- Clinician-Symptom mapping (which clinicians treat which symptoms)
+CREATE TABLE clinician_symptoms (
+    clinician_id UUID REFERENCES clinicians(id),
+    symptom_id UUID REFERENCES symptoms(id),
+    PRIMARY KEY (clinician_id, symptom_id)
+);
+
+-- Service-Symptom mapping (which services address which symptoms)
+CREATE TABLE service_symptoms (
+    service_id UUID REFERENCES services(id),
+    symptom_id UUID REFERENCES symptoms(id),
+    PRIMARY KEY (service_id, symptom_id)
+);
+
 -- Availability slots table
 CREATE TABLE availability_slots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,12 +99,16 @@ CREATE TABLE availability_slots (
     date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
+    duration_minutes INTEGER NOT NULL DEFAULT 30,
     is_recurring BOOLEAN DEFAULT FALSE,
     recurrence_pattern VARCHAR(50), -- daily, weekly, monthly
     recurrence_end_date DATE,
     max_patients INTEGER DEFAULT 1,
     booked_patients INTEGER DEFAULT 0,
-    status VARCHAR(20) DEFAULT 'available', -- available, booked, blocked
+    status VARCHAR(20) DEFAULT 'available', -- available, reserved, booked, blocked
+    patient_age_min INTEGER, -- Minimum age requirement for this slot (optional)
+    patient_age_max INTEGER, -- Maximum age requirement for this slot (optional)
+    patient_gender_required VARCHAR(20), -- Gender requirement for this slot (optional)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -164,6 +182,10 @@ CREATE INDEX idx_availability_clinician_date ON availability_slots(clinician_id,
 CREATE INDEX idx_consultations_booking_id ON consultations(booking_id);
 CREATE INDEX idx_symptoms_name ON symptoms(name);
 CREATE INDEX idx_conditions_name ON conditions(name);
+CREATE INDEX idx_clinician_symptoms_clinician_id ON clinician_symptoms(clinician_id);
+CREATE INDEX idx_clinician_symptoms_symptom_id ON clinician_symptoms(symptom_id);
+CREATE INDEX idx_service_symptoms_service_id ON service_symptoms(service_id);
+CREATE INDEX idx_service_symptoms_symptom_id ON service_symptoms(symptom_id);
 
 -- Trigger functions for automatic timestamp updates
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -200,7 +222,12 @@ INSERT INTO symptoms (name, description, body_system, severity_level) VALUES
 ('Fever', 'Elevated body temperature', 'General', 4),
 ('Cough', 'Forceful expulsion of air from the lungs', 'Respiratory', 2),
 ('Fatigue', 'Feeling of tiredness or exhaustion', 'General', 3),
-('Nausea', 'Feeling of sickness with an urge to vomit', 'Digestive', 3);
+('Nausea', 'Feeling of sickness with an urge to vomit', 'Digestive', 3),
+('Chest Pain', 'Discomfort or pain in the chest area', 'Cardiovascular', 7),
+('Shortness of Breath', 'Difficulty breathing or feeling breathless', 'Respiratory', 6),
+('Dizziness', 'Feeling of lightheadedness or unsteadiness', 'Nervous', 4),
+('Back Pain', 'Pain in the back region', 'Musculoskeletal', 5),
+('Anxiety', 'Feelings of worry, nervousness, or unease', 'Mental Health', 5);
 
 -- Insert some common conditions
 INSERT INTO conditions (name, description, icd_code, chronic) VALUES
@@ -230,3 +257,29 @@ INSERT INTO clinicians (first_name, last_name, title, specialty, license_number,
 ('Sarah', 'Johnson', 'Dr.', 'General Practice', 'MD12345', 15, 4.8),
 ('Michael', 'Chen', 'Dr.', 'Cardiology', 'MD67890', 12, 4.9),
 ('Emily', 'Rodriguez', 'Dr.', 'Neurology', 'MD54321', 10, 4.7);
+
+-- Map clinicians to symptoms they treat
+INSERT INTO clinician_symptoms (clinician_id, symptom_id)
+SELECT c.id, s.id FROM clinicians c, symptoms s
+WHERE c.last_name = 'Johnson' AND s.name IN ('Headache', 'Fever', 'Cough', 'Fatigue', 'Nausea');
+
+INSERT INTO clinician_symptoms (clinician_id, symptom_id)
+SELECT c.id, s.id FROM clinicians c, symptoms s
+WHERE c.last_name = 'Chen' AND s.name IN ('Chest Pain', 'Shortness of Breath', 'Fatigue', 'Dizziness');
+
+INSERT INTO clinician_symptoms (clinician_id, symptom_id)
+SELECT c.id, s.id FROM clinicians c, symptoms s
+WHERE c.last_name = 'Rodriguez' AND s.name IN ('Headache', 'Dizziness', 'Back Pain', 'Anxiety');
+
+-- Map services to symptoms they address
+INSERT INTO service_symptoms (service_id, symptom_id)
+SELECT s.id, sym.id FROM services s, symptoms sym
+WHERE s.name = 'General Checkup' AND sym.name IN ('Headache', 'Fever', 'Cough', 'Fatigue', 'Nausea');
+
+INSERT INTO service_symptoms (service_id, symptom_id)
+SELECT s.id, sym.id FROM services s, symptoms sym
+WHERE s.name = 'Consultation' AND sym.name IN ('Headache', 'Chest Pain', 'Dizziness', 'Back Pain', 'Anxiety');
+
+INSERT INTO service_symptoms (service_id, symptom_id)
+SELECT s.id, sym.id FROM services s, symptoms sym
+WHERE s.name = 'Follow-up Visit' AND sym.name IN ('Fatigue', 'Nausea', 'Shortness of Breath');

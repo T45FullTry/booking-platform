@@ -34,6 +34,7 @@ pub struct CreateBookingRequest {
     pub patient_id: Uuid,
     pub clinician_id: Uuid,
     pub service_id: Uuid,
+    pub availability_slot_id: Uuid,
     pub booking_date: NaiveDate,
     pub booking_time: NaiveTime,
     pub duration_minutes: i32,
@@ -84,6 +85,22 @@ pub struct ClinicianSearchRequest {
     pub symptom: Option<String>,
     pub condition: Option<String>,
     pub specialty: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SymptomFilter {
+    pub symptoms: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ServiceWithSymptoms {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub duration_minutes: i32,
+    pub price: Option<f64>,
+    pub category: Option<String>,
+    pub symptoms: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

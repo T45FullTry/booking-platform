@@ -7,6 +7,7 @@ A comprehensive medical appointment booking platform with voice and text interfa
 ### Frontend (React + Bootstrap)
 - **Voice Booking**: Speech recognition for hands-free appointment booking
 - **Text Booking**: Traditional form-based booking interface
+- **Symptom-Based Search**: Filter clinicians and services by symptoms
 - **Availability Search**: Search clinicians by symptom, condition, or specialty
 - **Responsive Design**: Mobile-friendly interface with Bootstrap
 - **Modern UI**: Clean, professional healthcare interface
@@ -57,6 +58,9 @@ The platform includes comprehensive database entities:
 - **Services**: Types of medical services offered
 - **Symptoms**: Reported symptoms for matching with conditions
 - **Conditions**: Medical conditions with ICD codes
+- **Clinician Symptoms**: Mapping of which clinicians treat which symptoms
+- **Service Symptoms**: Mapping of which services address which symptoms
+- **Symptom Conditions**: Mapping between symptoms and conditions
 - **Availability Slots**: Time slots for appointments
 - **Bookings**: Appointment bookings with status tracking
 - **Consultations**: Post-appointment records
@@ -66,14 +70,29 @@ The platform includes comprehensive database entities:
 
 ### Main Service (Port 8080)
 ```
+# Patient Management
 POST   /api/patients              # Create patient
+
+# Booking Management
 POST   /api/bookings              # Create booking
 GET    /api/bookings/{id}         # Get booking details
 POST   /api/bookings/cancel       # Cancel booking
+
+# Availability
 GET    /api/availability          # Get availability slots
+
+# Clinician Search (with symptom filtering)
 GET    /api/clinicians/search     # Search clinicians (proxies to microservice)
 GET    /api/clinicians/search-db  # Search clinicians (direct DB)
+POST   /api/clinicians/search-by-symptoms  # Search clinicians by multiple symptoms
 GET    /api/clinicians/{id}       # Get clinician details
+GET    /api/clinicians/{id}/symptoms  # Get symptoms treated by clinician
+
+# Services (with symptom filtering)
+POST   /api/services/by-symptoms  # Get services that address specific symptoms
+
+# Symptoms Reference
+GET    /api/symptoms              # Get all available symptoms
 ```
 
 ### Microservices (Port 8081)
