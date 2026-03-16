@@ -8,21 +8,24 @@ A comprehensive medical appointment booking platform with voice and text interfa
 - **Voice Booking**: Speech recognition for hands-free appointment booking
 - **Text Booking**: Traditional form-based booking interface
 - **Availability Search**: Search clinicians by symptom, condition, or specialty
+- **Document Preview**: View medical documents by category (sick notes, referrals, prescriptions, lab results)
 - **Responsive Design**: Mobile-friendly interface with Bootstrap
 - **Modern UI**: Clean, professional healthcare interface
 
 ### Backend (Rust)
 - **Main API Service**: Actix-web based REST API for bookings and patient management
+- **Document API**: CRUD operations for medical documents with streaming support
 - **Microservices**: Specialized services for complex operations
 - **Database Integration**: PostgreSQL with comprehensive schema
 - **High Performance**: Rust's speed and memory safety
 
 ### Microservices
 - **Clinician Search Service**: Specialized service for finding clinicians by symptoms/conditions
+- **Document Service**: Dedicated service for document streaming, upload, and management
 
 ### Database
 - **PostgreSQL**: Robust relational database with comprehensive medical entities
-- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings, Availability Slots, Consultations
+- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings, Availability Slots, Consultations, Prescriptions, Documents
 
 ## Project Structure
 
@@ -38,11 +41,16 @@ booking-platform/
 ├── frontend/               # React frontend
 │   ├── src/
 │   │   ├── components/      # React components
+│   │   │   ├── DocumentPreview.js  # Document preview UI
+│   │   │   ├── BookingForm.js     # Booking form
+│   │   │   ├── AvailabilitySearch.js # Search UI
+│   │   │   └── VoiceBooking.js    # Voice booking
 │   │   ├── App.js          # Main application
 │   │   └── index.js         # Entry point
 │   └── package.json        # Dependencies
 ├── microservices/          # Specialized services
-│   └── clinician-search/   # Clinician search microservice
+│   ├── clinician-search/   # Clinician search microservice
+│   └── document-service/   # Document streaming & management
 ├── database/               # Database schema and migrations
 │   └── schema.sql          # Complete database schema
 └── docs/                   # Documentation
@@ -61,6 +69,7 @@ The platform includes comprehensive database entities:
 - **Bookings**: Appointment bookings with status tracking
 - **Consultations**: Post-appointment records
 - **Prescriptions**: Medication prescriptions
+- **Documents**: Medical documents with categories (sick notes, referrals, prescriptions, lab results, etc.), binary content storage, and patient visibility controls
 
 ## API Endpoints
 
@@ -74,12 +83,24 @@ GET    /api/availability          # Get availability slots
 GET    /api/clinicians/search     # Search clinicians (proxies to microservice)
 GET    /api/clinicians/search-db  # Search clinicians (direct DB)
 GET    /api/clinicians/{id}       # Get clinician details
+POST   /api/documents             # Upload document
+GET    /api/documents             # List documents (filter by category)
+GET    /api/documents/{id}        # Get document details
+PUT    /api/documents/{id}        # Update document
+DELETE /api/documents/{id}        # Soft delete document
+GET    /api/documents/{id}/stream # Stream document content
 ```
 
 ### Microservices (Port 8081)
 ```
 GET    /api/search-clinicians     # Search clinicians by criteria
 GET    /api/clinicians/{id}       # Get detailed clinician information
+POST   /api/documents             # Upload document
+GET    /api/documents             # List documents
+GET    /api/documents/{id}        # Get document details
+PUT    /api/documents/{id}        # Update document
+DELETE /api/documents/{id}        # Delete document
+GET    /api/documents/{id}/stream # Stream document content
 ```
 
 ## Setup Instructions
@@ -99,7 +120,13 @@ DATABASE_URL=postgresql://user:password@localhost/booking_platform cargo run
 
 ### Microservice Setup
 ```bash
+# Clinician Search Service
 cd microservices/clinician-search
+cargo build
+DATABASE_URL=postgresql://user:password@localhost/booking_platform cargo run
+
+# Document Service (Port 8081)
+cd microservices/document-service
 cargo build
 DATABASE_URL=postgresql://user:password@localhost/booking_platform cargo run
 ```
@@ -109,6 +136,7 @@ DATABASE_URL=postgresql://user:password@localhost/booking_platform cargo run
 cd frontend
 npm install
 npm start
+# Navigate to /documents for document preview UI
 ```
 
 ### Database Setup
@@ -123,12 +151,14 @@ psql -U username -d booking_platform -f database/schema.sql
 - **Actix-web**: Web framework
 - **SQLx**: Database toolkit
 - **PostgreSQL**: Relational database
+- **Base64**: Document content encoding
 
 ### Frontend
 - **React**: JavaScript library for UI
 - **Bootstrap**: CSS framework
 - **React Bootstrap**: Bootstrap components for React
 - **Web Speech API**: Voice recognition
+- **File/Blob handling**: Document preview rendering
 
 ### Microservices
 - **Rust**: For performance-critical services
@@ -139,9 +169,11 @@ psql -U username -d booking_platform -f database/schema.sql
 - Telemedicine video consultations
 - SMS and email notifications
 - Insurance verification
-- Medical record integration
 - Analytics dashboard
 - Multi-language support
+- Document OCR and search
+- E-prescription integration with pharmacies
+- Patient portal for document access
 
 ## Contributing
 
