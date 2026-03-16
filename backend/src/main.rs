@@ -42,6 +42,15 @@ async fn main() -> std::io::Result<()> {
                             .route("/search-db", web::get().to(handlers::search_clinicians_db))
                             .route("/{id}", web::get().to(handlers::get_clinician))
                     )
+                    .service(
+                        web::scope("/documents")
+                            .route("", web::post().to(handlers::create_document))
+                            .route("", web::get().to(handlers::get_documents_by_category))
+                            .route("/{id}", web::get().to(handlers::get_document))
+                            .route("/{id}", web::put().to(handlers::update_document))
+                            .route("/{id}", web::delete().to(handlers::delete_document))
+                            .route("/{id}/stream", web::get().to(handlers::stream_document))
+                    )
             )
     })
     .bind("127.0.0.1:8080")?

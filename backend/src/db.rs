@@ -347,3 +347,264 @@ pub async fn cancel_booking(
     
     Ok(result > 0)
 }
+
+// Document struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Document {
+    pub id: Uuid,
+    pub patient_id: Uuid,
+    pub clinician_id: Uuid,
+    pub booking_id: Option<Uuid>,
+    pub consultation_id: Option<Uuid>,
+    pub category: String,
+    pub document_type: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub content: Option<Vec<u8>>,
+    pub content_text: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    pub page_count: Option<i32>,
+    pub status: String,
+    pub is_patient_visible: bool,
+    pub metadata: Option<serde_json::Value>,
+    pub created_by: Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Document operations
+pub async fn create_document(
+    pool: &Pool,
+    doc: &Document,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO documents (patient_id, clinician_id, booking_id, consultation_id, 
+                                category, document_type, title, description, file_name, 
+                                mime_type, content, content_text, file_size_bytes, 
+                                is_patient_visible, metadata, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         RETURNING id",
+        &[
+            &doc.patient_id,
+            &doc.clinician_id,
+            &doc.booking_id,
+            &doc.consultation_id,
+            &doc.category,
+            &doc.document_type,
+            &doc.title,
+            &doc.description,
+            &doc.file_name,
+            &doc.mime_type,
+            &doc.content,
+            &doc.content_text,
+            &doc.file_size_bytes,
+            &doc.is_patient_visible,
+            &doc.metadata,
+            &doc.created_by,
+        ],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_document(
+    pool: &Pool,
+    document_id: Uuid,
+) -> Result<Option<Document>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_opt(
+        "SELECT id, patient_id, clinician_id, booking_id, consultation_id, category,
+                document_type, title, description, file_name, mime_type, content,
+                content_text, file_size_bytes, page_count, status, is_patient_visible,
+                metadata, created_by, created_at, updated_at
+         FROM documents WHERE id = $1",
+        &[&document_id],
+    ).await?;
+
+    match row {
+        Some(row) => Ok(Some(Document {
+            id: row.get("id"),
+            patient_id: row.get("patient_id"),
+            clinician_id: row.get("clinician_id"),
+            booking_id: row.get("booking_id"),
+            consultation_id: row.get("consultation_id"),
+            category: row.get("category"),
+            document_type: row.get("document_type"),
+            title: row.get("title"),
+            description: row.get("description"),
+            file_name: row.get("file_name"),
+            mime_type: row.get("mime_type"),
+            content: row.get("content"),
+            content_text: row.get("content_text"),
+            file_size_bytes: row.get("file_size_bytes"),
+            page_count: row.get("page_count"),
+            status: row.get("status"),
+            is_patient_visible: row.get("is_patient_visible"),
+            metadata: row.get("metadata"),
+            created_by: row.get("created_by"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })),
+        None => Ok(None),
+    }
+}
+
+pub async fn get_documents_by_patient(
+    pool: &Pool,
+    patient_id: Uuid,
+    category: Option<&str>,
+    status: Option<&str>,
+    page: usize,
+    limit: usize,
+) -> Result<Vec<Document>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let offset = page * limit;
+
+    let mut where_clause = String::from("WHERE patient_id = $1");
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![&patient_id];
+    let mut param_idx = 2;
+
+    if let Some(cat) = category {
+        where_clause.push_str(&format!(" AND category = ${}", param_idx));
+        params.push(cat);
+        param_idx += 1;
+    }
+
+    if let Some(s) = status {
+        where_clause.push_str(&format!(" AND status = ${}", param_idx));
+        params.push(s);
+        param_idx += 1;
+    }
+
+    let query = format!(
+        "SELECT id, patient_id, clinician_id, booking_id, consultation_id, category,
+                document_type, title, description, file_name, mime_type, content,
+                content_text, file_size_bytes, page_count, status, is_patient_visible,
+                metadata, created_by, created_at, updated_at
+         FROM documents {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+        where_clause, param_idx, param_idx + 1
+    );
+
+    params.push(&limit);
+    params.push(&offset);
+
+    let rows = client.query(&query, &params).await?;
+
+    Ok(rows.into_iter().map(|row| Document {
+        id: row.get("id"),
+        patient_id: row.get("patient_id"),
+        clinician_id: row.get("clinician_id"),
+        booking_id: row.get("booking_id"),
+        consultation_id: row.get("consultation_id"),
+        category: row.get("category"),
+        document_type: row.get("document_type"),
+        title: row.get("title"),
+        description: row.get("description"),
+        file_name: row.get("file_name"),
+        mime_type: row.get("mime_type"),
+        content: row.get("content"),
+        content_text: row.get("content_text"),
+        file_size_bytes: row.get("file_size_bytes"),
+        page_count: row.get("page_count"),
+        status: row.get("status"),
+        is_patient_visible: row.get("is_patient_visible"),
+        metadata: row.get("metadata"),
+        created_by: row.get("created_by"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+pub async fn update_document(
+    pool: &Pool,
+    document_id: Uuid,
+    title: Option<&str>,
+    description: Option<&str>,
+    category: Option<&str>,
+    status: Option<&str>,
+    is_patient_visible: Option<bool>,
+    metadata: Option<&serde_json::Value>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+
+    let mut sets: Vec<String> = Vec::new();
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::new();
+    let mut param_idx = 1;
+
+    if let Some(t) = title {
+        sets.push(format!("title = ${}", param_idx));
+        params.push(t);
+        param_idx += 1;
+    }
+    if let Some(d) = description {
+        sets.push(format!("description = ${}", param_idx));
+        params.push(d);
+        param_idx += 1;
+    }
+    if let Some(c) = category {
+        sets.push(format!("category = ${}", param_idx));
+        params.push(c);
+        param_idx += 1;
+    }
+    if let Some(s) = status {
+        sets.push(format!("status = ${}", param_idx));
+        params.push(s);
+        param_idx += 1;
+    }
+    if let Some(ipv) = is_patient_visible {
+        sets.push(format!("is_patient_visible = ${}", param_idx));
+        params.push(ipv);
+        param_idx += 1;
+    }
+    if let Some(m) = metadata {
+        sets.push(format!("metadata = ${}", param_idx));
+        params.push(m);
+        param_idx += 1;
+    }
+
+    if sets.is_empty() {
+        return Ok(false);
+    }
+
+    params.push(&document_id);
+    let query = format!(
+        "UPDATE documents SET {} WHERE id = ${}",
+        sets.join(", "),
+        param_idx
+    );
+
+    let result = client.execute(&query, &params).await?;
+    Ok(result > 0)
+}
+
+pub async fn delete_document(
+    pool: &Pool,
+    document_id: Uuid,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let result = client.execute(
+        "UPDATE documents SET status = 'deleted' WHERE id = $1 AND status = 'active'",
+        &[&document_id],
+    ).await?;
+
+    Ok(result > 0)
+}
+
+pub async fn stream_document_content(
+    pool: &Pool,
+    document_id: Uuid,
+) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_opt(
+        "SELECT content FROM documents WHERE id = $1 AND status = 'active'",
+        &[&document_id],
+    ).await?;
+
+    match row {
+        Some(row) => Ok(row.get("content")),
+        None => Ok(None),
+    }
+}

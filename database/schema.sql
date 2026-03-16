@@ -225,6 +225,43 @@ INSERT INTO services (name, description, duration_minutes, price, category) VALU
 ('Consultation', 'Discussion with healthcare provider', 15, 75.00, 'Consultation'),
 ('Follow-up Visit', 'Post-treatment check', 20, 50.00, 'Follow-up');
 
+-- Documents table for medical documents (sick notes, referrals, prescriptions, lab results, etc.)
+CREATE TABLE documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES patients(id),
+    clinician_id UUID NOT NULL REFERENCES clinicians(id),
+    booking_id UUID REFERENCES bookings(id),
+    consultation_id UUID REFERENCES consultations(id),
+    category VARCHAR(50) NOT NULL, -- sick_note, referral, prescription, lab_result, medical_report, discharge_summary, other
+    document_type VARCHAR(100), -- Specific type within category
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    file_name VARCHAR(255),
+    mime_type VARCHAR(100), -- application/pdf, image/png, etc.
+    content BYTEA, -- Binary content for file storage
+    content_text TEXT, -- Text content for text-based documents
+    file_size_bytes BIGINT,
+    page_count INTEGER,
+    status VARCHAR(20) DEFAULT 'active', -- active, archived, deleted
+    is_patient_visible BOOLEAN DEFAULT TRUE,
+    metadata JSONB, -- Additional metadata (issuer, issue_date, etc.)
+    created_by UUID NOT NULL REFERENCES clinicians(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for documents
+CREATE INDEX idx_documents_patient_id ON documents(patient_id);
+CREATE INDEX idx_documents_clinician_id ON documents(clinician_id);
+CREATE INDEX idx_documents_category ON documents(category);
+CREATE INDEX idx_documents_booking_id ON documents(booking_id);
+CREATE INDEX idx_documents_status ON documents(status);
+CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
+
+-- Trigger for documents timestamp update
+CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Insert sample clinicians
 INSERT INTO clinicians (first_name, last_name, title, specialty, license_number, experience_years, rating) VALUES
 ('Sarah', 'Johnson', 'Dr.', 'General Practice', 'MD12345', 15, 4.8),

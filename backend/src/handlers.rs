@@ -6,7 +6,9 @@ use serde_json::Value;
 
 use crate::models::{
     CreateBookingRequest, BookingResponse, AvailabilityRequest, CancelBookingRequest,
-    CreatePatientRequest, PatientResponse, ClinicianSearchRequest, ClinicianSearchResponse
+    CreatePatientRequest, PatientResponse, ClinicianSearchRequest, ClinicianSearchResponse,
+    CreateDocumentRequest, UpdateDocumentRequest, DocumentResponse, DocumentListResponse,
+    DocumentCategoryFilter,
 };
 use crate::db;
 
@@ -240,5 +242,204 @@ pub async fn get_clinician(
             }
         }
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to connect to search service")),
+    }
+}
+
+// Document handlers
+pub async fn create_document(
+    pool: web::Data<PgPool>,
+    doc_data: web::Json<CreateDocumentRequest>,
+) -> Result<HttpResponse> {
+    // Decode base64 content if provided
+    let content = if let Some(base64_str) = &doc_data.content_base64 {
+        match base64::decode(base64_str) {
+            Ok(bytes) => Some(bytes),
+            Err(_) => return Ok(HttpResponse::BadRequest().json("Invalid base64 content")),
+        }
+    } else {
+        None
+    };
+
+    let file_size = content.as_ref().map(|c| c.len() as i64);
+
+    let doc = crate::db::Document {
+        id: Uuid::new_v4(),
+        patient_id: doc_data.patient_id,
+        clinician_id: doc_data.clinician_id,
+        booking_id: doc_data.booking_id,
+        consultation_id: doc_data.consultation_id,
+        category: doc_data.category.clone(),
+        document_type: doc_data.document_type.clone(),
+        title: doc_data.title.clone(),
+        description: doc_data.description.clone(),
+        file_name: doc_data.file_name.clone(),
+        mime_type: doc_data.mime_type.clone(),
+        content,
+        content_text: doc_data.content_text.clone(),
+        file_size_bytes: file_size,
+        page_count: None,
+        status: "active".to_string(),
+        is_patient_visible: doc_data.is_patient_visible.unwrap_or(true),
+        metadata: doc_data.metadata.clone(),
+        created_by: doc_data.clinician_id,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+
+    match crate::db::create_document(&pool, &doc).await {
+        Ok(doc_id) => {
+            let response = DocumentResponse {
+                id: doc_id,
+                patient_id: doc.patient_id,
+                clinician_id: doc.clinician_id,
+                booking_id: doc.booking_id,
+                consultation_id: doc.consultation_id,
+                category: doc.category,
+                document_type: doc.document_type,
+                title: doc.title,
+                description: doc.description,
+                file_name: doc.file_name,
+                mime_type: doc.mime_type,
+                file_size_bytes: doc.file_size_bytes,
+                page_count: doc.page_count,
+                status: doc.status,
+                is_patient_visible: doc.is_patient_visible,
+                metadata: doc.metadata,
+                created_by: doc.created_by,
+                created_at: doc.created_at.to_rfc3339(),
+                updated_at: doc.updated_at.to_rfc3339(),
+            };
+            Ok(HttpResponse::Created().json(response))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_document(
+    pool: web::Data<PgPool>,
+    document_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_document(&pool, *document_id).await {
+        Ok(Some(doc)) => {
+            let response = DocumentResponse {
+                id: doc.id,
+                patient_id: doc.patient_id,
+                clinician_id: doc.clinician_id,
+                booking_id: doc.booking_id,
+                consultation_id: doc.consultation_id,
+                category: doc.category,
+                document_type: doc.document_type,
+                title: doc.title,
+                description: doc.description,
+                file_name: doc.file_name,
+                mime_type: doc.mime_type,
+                file_size_bytes: doc.file_size_bytes,
+                page_count: doc.page_count,
+                status: doc.status,
+                is_patient_visible: doc.is_patient_visible,
+                metadata: doc.metadata,
+                created_by: doc.created_by,
+                created_at: doc.created_at.to_rfc3339(),
+                updated_at: doc.updated_at.to_rfc3339(),
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Ok(None) => Ok(HttpResponse::NotFound().json("Document not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_documents_by_category(
+    pool: web::Data<PgPool>,
+    filter: web::Query<DocumentCategoryFilter>,
+) -> Result<HttpResponse> {
+    let page = filter.page.unwrap_or(0);
+    let limit = filter.limit.unwrap_or(20);
+
+    match crate::db::get_documents_by_patient(
+        &pool,
+        filter.patient_id.unwrap_or_else(Uuid::nil),
+        filter.category.as_deref(),
+        filter.status.as_deref(),
+        page,
+        limit,
+    ).await {
+        Ok(docs) => {
+            let responses: Vec<DocumentResponse> = docs.into_iter().map(|doc| {
+                DocumentResponse {
+                    id: doc.id,
+                    patient_id: doc.patient_id,
+                    clinician_id: doc.clinician_id,
+                    booking_id: doc.booking_id,
+                    consultation_id: doc.consultation_id,
+                    category: doc.category,
+                    document_type: doc.document_type,
+                    title: doc.title,
+                    description: doc.description,
+                    file_name: doc.file_name,
+                    mime_type: doc.mime_type,
+                    file_size_bytes: doc.file_size_bytes,
+                    page_count: doc.page_count,
+                    status: doc.status,
+                    is_patient_visible: doc.is_patient_visible,
+                    metadata: doc.metadata,
+                    created_by: doc.created_by,
+                    created_at: doc.created_at.to_rfc3339(),
+                    updated_at: doc.updated_at.to_rfc3339(),
+                }
+            }).collect();
+
+            let response = DocumentListResponse {
+                documents: responses,
+                total_count: responses.len(),
+                page,
+                has_more: responses.len() == limit,
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn update_document(
+    pool: web::Data<PgPool>,
+    document_id: web::Path<Uuid>,
+    update_data: web::Json<UpdateDocumentRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::update_document(
+        &pool,
+        *document_id,
+        update_data.title.as_deref(),
+        update_data.description.as_deref(),
+        update_data.category.as_deref(),
+        update_data.status.as_deref(),
+        update_data.is_patient_visible,
+        update_data.metadata.as_ref(),
+    ).await {
+        Ok(true) => Ok(HttpResponse::Ok().json("Document updated successfully")),
+        Ok(false) => Ok(HttpResponse::NotFound().json("Document not found or no changes made")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn delete_document(
+    pool: web::Data<PgPool>,
+    document_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::delete_document(&pool, *document_id).await {
+        Ok(true) => Ok(HttpResponse::Ok().json("Document deleted successfully")),
+        Ok(false) => Ok(HttpResponse::NotFound().json("Document not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn stream_document(
+    pool: web::Data<PgPool>,
+    document_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::stream_document_content(&pool, *document_id).await {
+        Ok(Some(content)) => Ok(HttpResponse::Ok().content_type("application/octet-stream").body(content)),
+        Ok(None) => Ok(HttpResponse::NotFound().json("Document content not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
     }
 }

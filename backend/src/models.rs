@@ -125,3 +125,74 @@ pub struct ClinicianDetailsResponse {
 pub struct CancelBookingRequest {
     pub booking_id: Uuid,
 }
+
+// Document models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateDocumentRequest {
+    pub patient_id: Uuid,
+    pub clinician_id: Uuid,
+    pub booking_id: Option<Uuid>,
+    pub consultation_id: Option<Uuid>,
+    pub category: String, // sick_note, referral, prescription, lab_result, medical_report, discharge_summary, other
+    pub document_type: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub content_base64: Option<String>, // Base64 encoded binary content
+    pub content_text: Option<String>,
+    pub is_patient_visible: Option<bool>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateDocumentRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub category: Option<String>,
+    pub status: Option<String>,
+    pub is_patient_visible: Option<bool>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DocumentResponse {
+    pub id: Uuid,
+    pub patient_id: Uuid,
+    pub clinician_id: Uuid,
+    pub booking_id: Option<Uuid>,
+    pub consultation_id: Option<Uuid>,
+    pub category: String,
+    pub document_type: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    pub page_count: Option<i32>,
+    pub status: String,
+    pub is_patient_visible: bool,
+    pub metadata: Option<serde_json::Value>,
+    pub created_by: Uuid,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DocumentListResponse {
+    pub documents: Vec<DocumentResponse>,
+    pub total_count: usize,
+    pub page: usize,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DocumentCategoryFilter {
+    pub category: Option<String>,
+    pub patient_id: Option<Uuid>,
+    pub status: Option<String>,
+    pub date_from: Option<NaiveDate>,
+    pub date_to: Option<NaiveDate>,
+    pub page: Option<usize>,
+    pub limit: Option<usize>,
+}

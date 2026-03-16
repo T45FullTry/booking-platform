@@ -8,6 +8,7 @@ import HomePage from './components/HomePage';
 import BookingForm from './components/BookingForm';
 import AvailabilitySearch from './components/AvailabilitySearch';
 import VoiceBooking from './components/VoiceBooking';
+import DocumentPreview from './components/DocumentPreview';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
               <Nav.Link href="/book">Book Appointment</Nav.Link>
               <Nav.Link href="/search">Search Availability</Nav.Link>
               <Nav.Link href="/voice">Voice Booking</Nav.Link>
+              <Nav.Link href="/documents">Documents</Nav.Link>
             </Nav>
           </Container>
         </Navbar>
@@ -31,6 +33,7 @@ function App() {
             <Route path="/book" element={<BookingForm />} />
             <Route path="/search" element={<AvailabilitySearch />} />
             <Route path="/voice" element={<VoiceBooking />} />
+            <Route path="/documents" element={<DocumentPreview />} />
           </Routes>
         </Container>
       </div>
