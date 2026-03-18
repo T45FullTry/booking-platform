@@ -98,7 +98,8 @@ CREATE TABLE availability_slots (
 -- Bookings table
 CREATE TABLE bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id UUID NOT NULL REFERENCES patients(id),
+    patient_id UUID NOT NULL REFERENCES patients(id), -- The person the appointment is for (appointee)
+    booker_id UUID NOT NULL REFERENCES patients(id), -- The person making the booking
     clinician_id UUID NOT NULL REFERENCES clinicians(id),
     service_id UUID NOT NULL REFERENCES services(id),
     availability_slot_id UUID REFERENCES availability_slots(id),
@@ -158,6 +159,7 @@ CREATE TABLE prescriptions (
 CREATE INDEX idx_patients_email ON patients(email);
 CREATE INDEX idx_clinicians_specialty ON clinicians(specialty);
 CREATE INDEX idx_bookings_patient_id ON bookings(patient_id);
+CREATE INDEX idx_bookings_booker_id ON bookings(booker_id);
 CREATE INDEX idx_bookings_clinician_id ON bookings(clinician_id);
 CREATE INDEX idx_bookings_date ON bookings(booking_date);
 CREATE INDEX idx_availability_clinician_date ON availability_slots(clinician_id, date);

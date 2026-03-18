@@ -58,6 +58,7 @@ pub async fn create_booking(
     let booking = crate::db::Booking {
         id: Uuid::new_v4(),
         patient_id: booking_data.patient_id,
+        booker_id: booking_data.booker_id,
         clinician_id: booking_data.clinician_id,
         service_id: booking_data.service_id,
         booking_date: booking_data.booking_date,
@@ -75,6 +76,7 @@ pub async fn create_booking(
             let response = BookingResponse {
                 id: booking_result.id,
                 patient_id: booking_result.patient_id,
+                booker_id: booking_result.booker_id,
                 clinician_id: booking_result.clinician_id,
                 service_id: booking_result.service_id,
                 booking_date: booking_result.booking_date,
@@ -101,6 +103,7 @@ pub async fn get_booking(
             let response = BookingResponse {
                 id: booking.id,
                 patient_id: booking.patient_id,
+                booker_id: booking.booker_id,
                 clinician_id: booking.clinician_id,
                 service_id: booking.service_id,
                 booking_date: booking.booking_date,

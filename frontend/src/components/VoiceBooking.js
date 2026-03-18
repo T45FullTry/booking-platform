@@ -8,6 +8,9 @@ const VoiceBooking = () => {
   const [preferredDate, setPreferredDate] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [patientId, setPatientId] = useState(''); // The person the appointment is for (appointee)
+  const [bookerId, setBookerId] = useState('');   // The person making the booking
+  const [isBookingForSelf, setIsBookingForSelf] = useState(true);
 
   const {
     transcript,
@@ -49,16 +52,23 @@ const VoiceBooking = () => {
 
   const handleBooking = async (clinicianId) => {
     try {
+      const bookingData = {
+        patient_id: patientId || bookerId, // Default to booker if no patient specified
+        booker_id: bookerId,
+        clinician_id: clinicianId,
+        service_id: '1', // Default service - in production, this should be selected
+        booking_date: preferredDate,
+        booking_time: '09:00', // Default time - in production, this should be selected
+        duration_minutes: 30,
+        symptoms_reported: symptom ? [symptom] : null,
+      };
+      
       const response = await fetch('/api/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          clinician_id: clinicianId,
-          symptom,
-          preferred_date: preferredDate,
-        }),
+        body: JSON.stringify(bookingData),
       });
       
       if (response.ok) {
@@ -84,6 +94,58 @@ const VoiceBooking = () => {
       </Card.Header>
       <Card.Body>
         <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-3">
+            <Form.Label>Booking For:</Form.Label>
+            <Form.Check 
+              type="checkbox"
+              label="Booking for myself"
+              checked={isBookingForSelf}
+              onChange={(e) => {
+                setIsBookingForSelf(e.target.checked);
+                if (e.target.checked) {
+                  setPatientId(bookerId);
+                } else {
+                  setPatientId('');
+                }
+              }}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Your Patient ID (Booker):</Form.Label>
+            <Form.Control 
+              type="text" 
+              value={bookerId}
+              onChange={(e) => {
+                setBookerId(e.target.value);
+                if (isBookingForSelf) {
+                  setPatientId(e.target.value);
+                }
+              }}
+              placeholder="Enter your patient ID"
+              required
+            />
+            <Form.Text className="text-muted">
+              This is the person making the booking
+            </Form.Text>
+          </Form.Group>
+
+          {!isBookingForSelf && (
+            <Form.Group className="mb-3">
+              <Form.Label>Patient ID (Appointment For):</Form.Label>
+              <Form.Control 
+                type="text" 
+                value={patientId}
+                onChange={(e) => setPatientId(e.target.value)}
+                placeholder="Enter patient ID for the appointment"
+                required={!isBookingForSelf}
+              />
+              <Form.Text className="text-muted">
+                This is the person the appointment is for
+              </Form.Text>
+            </Form.Group>
+          )}
+
           <Form.Group className="mb-3">
             <Form.Label>Speak your symptoms or booking request:</Form.Label>
             <div className="d-flex gap-2">

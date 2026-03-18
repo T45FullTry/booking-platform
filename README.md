@@ -7,6 +7,7 @@ A comprehensive medical appointment booking platform with voice and text interfa
 ### Frontend (React + Bootstrap)
 - **Voice Booking**: Speech recognition for hands-free appointment booking
 - **Text Booking**: Traditional form-based booking interface
+- **Book on Behalf**: Book appointments for another person (family member, dependent, etc.) while including the booker in the appointment
 - **Availability Search**: Search clinicians by symptom, condition, or specialty
 - **Document Preview**: View medical documents by category (sick notes, referrals, prescriptions, lab results)
 - **Responsive Design**: Mobile-friendly interface with Bootstrap
@@ -25,7 +26,7 @@ A comprehensive medical appointment booking platform with voice and text interfa
 
 ### Database
 - **PostgreSQL**: Robust relational database with comprehensive medical entities
-- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings, Availability Slots, Consultations, Prescriptions, Documents
+- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings (with booker_id for proxy booking), Availability Slots, Consultations, Prescriptions, Documents
 
 ## Project Structure
 

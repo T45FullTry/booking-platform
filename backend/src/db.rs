@@ -79,7 +79,8 @@ pub struct AvailabilitySlot {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Booking {
     pub id: Uuid,
-    pub patient_id: Uuid,
+    pub patient_id: Uuid,      // The person the appointment is for (appointee)
+    pub booker_id: Uuid,       // The person making the booking
     pub clinician_id: Uuid,
     pub service_id: Uuid,
     pub booking_date: NaiveDate,
@@ -276,13 +277,13 @@ pub async fn create_booking(
 ) -> Result<Booking, Box<dyn std::error::Error>> {
     let client = pool.get().await?;
     let row = client.query_one(
-        "INSERT INTO bookings (patient_id, clinician_id, service_id, booking_date, 
+        "INSERT INTO bookings (patient_id, booker_id, clinician_id, service_id, booking_date, 
                                booking_time, duration_minutes, status, symptoms_reported, consultation_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id, patient_id, clinician_id, service_id, booking_date, 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id, patient_id, booker_id, clinician_id, service_id, booking_date, 
                    booking_time, duration_minutes, status, symptoms_reported, consultation_reason, 
                    created_at, updated_at",
-        &[&booking.patient_id, &booking.clinician_id, &booking.service_id, 
+        &[&booking.patient_id, &booking.booker_id, &booking.clinician_id, &booking.service_id, 
           &booking.booking_date, &booking.booking_time, &booking.duration_minutes,
           &booking.status, &booking.symptoms_reported, &booking.consultation_reason]
     ).await?;
@@ -290,6 +291,7 @@ pub async fn create_booking(
     Ok(Booking {
         id: row.get("id"),
         patient_id: row.get("patient_id"),
+        booker_id: row.get("booker_id"),
         clinician_id: row.get("clinician_id"),
         service_id: row.get("service_id"),
         booking_date: row.get("booking_date"),
@@ -309,7 +311,7 @@ pub async fn get_booking(
 ) -> Result<Option<Booking>, Box<dyn std::error::Error>> {
     let client = pool.get().await?;
     let row = client.query_opt(
-        "SELECT id, patient_id, clinician_id, service_id, booking_date, 
+        "SELECT id, patient_id, booker_id, clinician_id, service_id, booking_date, 
                 booking_time, duration_minutes, status, symptoms_reported, consultation_reason, 
                 created_at, updated_at
          FROM bookings WHERE id = $1",
@@ -320,6 +322,7 @@ pub async fn get_booking(
         Some(row) => Ok(Some(Booking {
             id: row.get("id"),
             patient_id: row.get("patient_id"),
+            booker_id: row.get("booker_id"),
             clinician_id: row.get("clinician_id"),
             service_id: row.get("service_id"),
             booking_date: row.get("booking_date"),

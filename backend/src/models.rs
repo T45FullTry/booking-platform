@@ -31,7 +31,8 @@ pub struct PatientResponse {
 // Booking models
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateBookingRequest {
-    pub patient_id: Uuid,
+    pub patient_id: Uuid,      // The person the appointment is for (appointee)
+    pub booker_id: Uuid,       // The person making the booking
     pub clinician_id: Uuid,
     pub service_id: Uuid,
     pub booking_date: NaiveDate,
@@ -44,7 +45,8 @@ pub struct CreateBookingRequest {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BookingResponse {
     pub id: Uuid,
-    pub patient_id: Uuid,
+    pub patient_id: Uuid,      // The person the appointment is for (appointee)
+    pub booker_id: Uuid,       // The person making the booking
     pub clinician_id: Uuid,
     pub service_id: Uuid,
     pub booking_date: NaiveDate,
