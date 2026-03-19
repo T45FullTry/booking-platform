@@ -611,3 +611,677 @@ pub async fn stream_document_content(
         None => Ok(None),
     }
 }
+
+// Organization Type struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OrganizationType {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Organization struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Organization {
+    pub id: Uuid,
+    pub name: String,
+    pub organization_type_id: Uuid,
+    pub organization_type_name: String,
+    pub registration_number: Option<String>,
+    pub tax_id: Option<String>,
+    pub website: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub fax: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub contact_person_name: Option<String>,
+    pub contact_person_email: Option<String>,
+    pub contact_person_phone: Option<String>,
+    pub notes: Option<String>,
+    pub status: String,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Organization Type operations
+pub async fn get_organization_types(pool: &Pool) -> Result<Vec<OrganizationType>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT id, name, description, created_at FROM organization_types ORDER BY name",
+        &[]
+    ).await?;
+    
+    Ok(rows.into_iter().map(|row| OrganizationType {
+        id: row.get("id"),
+        name: row.get("name"),
+        description: row.get("description"),
+        created_at: row.get("created_at"),
+    }).collect())
+}
+
+pub async fn get_organization_type(pool: &Pool, type_id: Uuid) -> Result<Option<OrganizationType>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_opt(
+        "SELECT id, name, description, created_at FROM organization_types WHERE id = $1",
+        &[&type_id]
+    ).await?;
+    
+    match row {
+        Some(row) => Ok(Some(OrganizationType {
+            id: row.get("id"),
+            name: row.get("name"),
+            description: row.get("description"),
+            created_at: row.get("created_at"),
+        })),
+        None => Ok(None),
+    }
+}
+
+// Organization operations
+pub async fn create_organization(
+    pool: &Pool,
+    org: &Organization,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO organizations (name, organization_type_id, registration_number, tax_id, 
+                                    website, email, phone, fax, address, city, state_province, 
+                                    postal_code, country, contact_person_name, contact_person_email, 
+                                    contact_person_phone, notes, status, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         RETURNING id",
+        &[
+            &org.name,
+            &org.organization_type_id,
+            &org.registration_number,
+            &org.tax_id,
+            &org.website,
+            &org.email,
+            &org.phone,
+            &org.fax,
+            &org.address,
+            &org.city,
+            &org.state_province,
+            &org.postal_code,
+            &org.country,
+            &org.contact_person_name,
+            &org.contact_person_email,
+            &org.contact_person_phone,
+            &org.notes,
+            &org.status,
+            &org.metadata,
+        ],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_organization(
+    pool: &Pool,
+    organization_id: Uuid,
+) -> Result<Option<Organization>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_opt(
+        "SELECT o.id, o.name, o.organization_type_id, ot.name as organization_type_name,
+                o.registration_number, o.tax_id, o.website, o.email, o.phone, o.fax,
+                o.address, o.city, o.state_province, o.postal_code, o.country,
+                o.contact_person_name, o.contact_person_email, o.contact_person_phone,
+                o.notes, o.status, o.metadata, o.created_at, o.updated_at
+         FROM organizations o
+         JOIN organization_types ot ON o.organization_type_id = ot.id
+         WHERE o.id = $1",
+        &[&organization_id],
+    ).await?;
+
+    match row {
+        Some(row) => Ok(Some(Organization {
+            id: row.get("id"),
+            name: row.get("name"),
+            organization_type_id: row.get("organization_type_id"),
+            organization_type_name: row.get("organization_type_name"),
+            registration_number: row.get("registration_number"),
+            tax_id: row.get("tax_id"),
+            website: row.get("website"),
+            email: row.get("email"),
+            phone: row.get("phone"),
+            fax: row.get("fax"),
+            address: row.get("address"),
+            city: row.get("city"),
+            state_province: row.get("state_province"),
+            postal_code: row.get("postal_code"),
+            country: row.get("country"),
+            contact_person_name: row.get("contact_person_name"),
+            contact_person_email: row.get("contact_person_email"),
+            contact_person_phone: row.get("contact_person_phone"),
+            notes: row.get("notes"),
+            status: row.get("status"),
+            metadata: row.get("metadata"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })),
+        None => Ok(None),
+    }
+}
+
+pub async fn get_organizations(
+    pool: &Pool,
+    filter: Option<&str>,
+    status: Option<&str>,
+    page: usize,
+    limit: usize,
+) -> Result<Vec<Organization>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let offset = page * limit;
+
+    let mut where_clause = String::from("WHERE 1=1");
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![];
+    let mut param_idx = 1;
+
+    if let Some(f) = filter {
+        where_clause.push_str(&format!(" AND (o.name ILIKE ${} OR ot.name ILIKE ${})", param_idx, param_idx));
+        params.push(&format!("%{}%", f));
+        param_idx += 1;
+    }
+
+    if let Some(s) = status {
+        where_clause.push_str(&format!(" AND o.status = ${}", param_idx));
+        params.push(s);
+        param_idx += 1;
+    }
+
+    let query = format!(
+        "SELECT o.id, o.name, o.organization_type_id, ot.name as organization_type_name,
+                o.registration_number, o.tax_id, o.website, o.email, o.phone, o.fax,
+                o.address, o.city, o.state_province, o.postal_code, o.country,
+                o.contact_person_name, o.contact_person_email, o.contact_person_phone,
+                o.notes, o.status, o.metadata, o.created_at, o.updated_at
+         FROM organizations o
+         JOIN organization_types ot ON o.organization_type_id = ot.id
+         {} ORDER BY o.name LIMIT ${} OFFSET ${}",
+        where_clause, param_idx, param_idx + 1
+    );
+
+    params.push(&limit);
+    params.push(&offset);
+
+    let rows = client.query(&query, &params).await?;
+
+    Ok(rows.into_iter().map(|row| Organization {
+        id: row.get("id"),
+        name: row.get("name"),
+        organization_type_id: row.get("organization_type_id"),
+        organization_type_name: row.get("organization_type_name"),
+        registration_number: row.get("registration_number"),
+        tax_id: row.get("tax_id"),
+        website: row.get("website"),
+        email: row.get("email"),
+        phone: row.get("phone"),
+        fax: row.get("fax"),
+        address: row.get("address"),
+        city: row.get("city"),
+        state_province: row.get("state_province"),
+        postal_code: row.get("postal_code"),
+        country: row.get("country"),
+        contact_person_name: row.get("contact_person_name"),
+        contact_person_email: row.get("contact_person_email"),
+        contact_person_phone: row.get("contact_person_phone"),
+        notes: row.get("notes"),
+        status: row.get("status"),
+        metadata: row.get("metadata"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+pub async fn update_organization(
+    pool: &Pool,
+    organization_id: Uuid,
+    name: Option<&str>,
+    organization_type_id: Option<Uuid>,
+    registration_number: Option<&str>,
+    tax_id: Option<&str>,
+    website: Option<&str>,
+    email: Option<&str>,
+    phone: Option<&str>,
+    address: Option<&str>,
+    city: Option<&str>,
+    state_province: Option<&str>,
+    postal_code: Option<&str>,
+    country: Option<&str>,
+    contact_person_name: Option<&str>,
+    contact_person_email: Option<&str>,
+    contact_person_phone: Option<&str>,
+    notes: Option<&str>,
+    status: Option<&str>,
+    metadata: Option<&serde_json::Value>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+
+    let mut sets: Vec<String> = Vec::new();
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::new();
+    let mut param_idx = 1;
+
+    if let Some(n) = name {
+        sets.push(format!("name = ${}", param_idx));
+        params.push(n);
+        param_idx += 1;
+    }
+    if let Some(otid) = organization_type_id {
+        sets.push(format!("organization_type_id = ${}", param_idx));
+        params.push(&otid);
+        param_idx += 1;
+    }
+    if let Some(rn) = registration_number {
+        sets.push(format!("registration_number = ${}", param_idx));
+        params.push(rn);
+        param_idx += 1;
+    }
+    if let Some(tid) = tax_id {
+        sets.push(format!("tax_id = ${}", param_idx));
+        params.push(tid);
+        param_idx += 1;
+    }
+    if let Some(w) = website {
+        sets.push(format!("website = ${}", param_idx));
+        params.push(w);
+        param_idx += 1;
+    }
+    if let Some(e) = email {
+        sets.push(format!("email = ${}", param_idx));
+        params.push(e);
+        param_idx += 1;
+    }
+    if let Some(p) = phone {
+        sets.push(format!("phone = ${}", param_idx));
+        params.push(p);
+        param_idx += 1;
+    }
+    if let Some(a) = address {
+        sets.push(format!("address = ${}", param_idx));
+        params.push(a);
+        param_idx += 1;
+    }
+    if let Some(c) = city {
+        sets.push(format!("city = ${}", param_idx));
+        params.push(c);
+        param_idx += 1;
+    }
+    if let Some(sp) = state_province {
+        sets.push(format!("state_province = ${}", param_idx));
+        params.push(sp);
+        param_idx += 1;
+    }
+    if let Some(pc) = postal_code {
+        sets.push(format!("postal_code = ${}", param_idx));
+        params.push(pc);
+        param_idx += 1;
+    }
+    if let Some(co) = country {
+        sets.push(format!("country = ${}", param_idx));
+        params.push(co);
+        param_idx += 1;
+    }
+    if let Some(cpn) = contact_person_name {
+        sets.push(format!("contact_person_name = ${}", param_idx));
+        params.push(cpn);
+        param_idx += 1;
+    }
+    if let Some(cpe) = contact_person_email {
+        sets.push(format!("contact_person_email = ${}", param_idx));
+        params.push(cpe);
+        param_idx += 1;
+    }
+    if let Some(cpp) = contact_person_phone {
+        sets.push(format!("contact_person_phone = ${}", param_idx));
+        params.push(cpp);
+        param_idx += 1;
+    }
+    if let Some(n) = notes {
+        sets.push(format!("notes = ${}", param_idx));
+        params.push(n);
+        param_idx += 1;
+    }
+    if let Some(s) = status {
+        sets.push(format!("status = ${}", param_idx));
+        params.push(s);
+        param_idx += 1;
+    }
+    if let Some(m) = metadata {
+        sets.push(format!("metadata = ${}", param_idx));
+        params.push(m);
+        param_idx += 1;
+    }
+
+    if sets.is_empty() {
+        return Ok(false);
+    }
+
+    params.push(&organization_id);
+    let query = format!(
+        "UPDATE organizations SET {} WHERE id = ${}",
+        sets.join(", "),
+        param_idx
+    );
+
+    let result = client.execute(&query, &params).await?;
+    Ok(result > 0)
+}
+
+pub async fn delete_organization(
+    pool: &Pool,
+    organization_id: Uuid,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let result = client.execute(
+        "UPDATE organizations SET status = 'inactive' WHERE id = $1 AND status = 'active'",
+        &[&organization_id],
+    ).await?;
+
+    Ok(result > 0)
+}
+
+// Patient Employment struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PatientEmployment {
+    pub id: Uuid,
+    pub patient_id: Uuid,
+    pub patient_name: String,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub job_title: Option<String>,
+    pub department: Option<String>,
+    pub employee_id: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub is_current: bool,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn create_patient_employment(
+    pool: &Pool,
+    patient_id: Uuid,
+    organization_id: Uuid,
+    job_title: Option<&str>,
+    department: Option<&str>,
+    employee_id: Option<&str>,
+    start_date: Option<NaiveDate>,
+    notes: Option<&str>,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO patient_employments (patient_id, organization_id, job_title, department, 
+                                          employee_id, start_date, is_current, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
+         RETURNING id",
+        &[&patient_id, &organization_id, &job_title, &department, &employee_id, &start_date, &notes],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_patient_employments(
+    pool: &Pool,
+    patient_id: Uuid,
+) -> Result<Vec<PatientEmployment>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT pe.id, pe.patient_id, p.first_name || ' ' || p.last_name as patient_name,
+                pe.organization_id, o.name as organization_name,
+                pe.job_title, pe.department, pe.employee_id, pe.start_date, pe.end_date,
+                pe.is_current, pe.notes, pe.created_at, pe.updated_at
+         FROM patient_employments pe
+         JOIN patients p ON pe.patient_id = p.id
+         JOIN organizations o ON pe.organization_id = o.id
+         WHERE pe.patient_id = $1
+         ORDER BY pe.is_current DESC, pe.start_date DESC",
+        &[&patient_id],
+    ).await?;
+
+    Ok(rows.into_iter().map(|row| PatientEmployment {
+        id: row.get("id"),
+        patient_id: row.get("patient_id"),
+        patient_name: row.get("patient_name"),
+        organization_id: row.get("organization_id"),
+        organization_name: row.get("organization_name"),
+        job_title: row.get("job_title"),
+        department: row.get("department"),
+        employee_id: row.get("employee_id"),
+        start_date: row.get("start_date"),
+        end_date: row.get("end_date"),
+        is_current: row.get("is_current"),
+        notes: row.get("notes"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+// Clinician Affiliation struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ClinicianAffiliation {
+    pub id: Uuid,
+    pub clinician_id: Uuid,
+    pub clinician_name: String,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub affiliation_type: Option<String>,
+    pub department: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub is_primary: bool,
+    pub is_current: bool,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn create_clinician_affiliation(
+    pool: &Pool,
+    clinician_id: Uuid,
+    organization_id: Uuid,
+    affiliation_type: Option<&str>,
+    department: Option<&str>,
+    start_date: Option<NaiveDate>,
+    is_primary: Option<bool>,
+    notes: Option<&str>,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO clinician_affiliations (clinician_id, organization_id, affiliation_type, 
+                                              department, start_date, is_primary, is_current, notes)
+         VALUES ($1, $2, $3, $4, $5, COALESCE($6, FALSE), TRUE, $7)
+         RETURNING id",
+        &[&clinician_id, &organization_id, &affiliation_type, &department, &start_date, &is_primary, &notes],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_clinician_affiliations(
+    pool: &Pool,
+    clinician_id: Uuid,
+) -> Result<Vec<ClinicianAffiliation>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT ca.id, ca.clinician_id, c.first_name || ' ' || c.last_name as clinician_name,
+                ca.organization_id, o.name as organization_name,
+                ca.affiliation_type, ca.department, ca.start_date, ca.end_date,
+                ca.is_primary, ca.is_current, ca.notes, ca.created_at, ca.updated_at
+         FROM clinician_affiliations ca
+         JOIN clinicians c ON ca.clinician_id = c.id
+         JOIN organizations o ON ca.organization_id = o.id
+         WHERE ca.clinician_id = $1
+         ORDER BY ca.is_primary DESC, ca.is_current DESC, ca.start_date DESC",
+        &[&clinician_id],
+    ).await?;
+
+    Ok(rows.into_iter().map(|row| ClinicianAffiliation {
+        id: row.get("id"),
+        clinician_id: row.get("clinician_id"),
+        clinician_name: row.get("clinician_name"),
+        organization_id: row.get("organization_id"),
+        organization_name: row.get("organization_name"),
+        affiliation_type: row.get("affiliation_type"),
+        department: row.get("department"),
+        start_date: row.get("start_date"),
+        end_date: row.get("end_date"),
+        is_primary: row.get("is_primary"),
+        is_current: row.get("is_current"),
+        notes: row.get("notes"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+// Booking Insurance struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct BookingInsurance {
+    pub id: Uuid,
+    pub booking_id: Uuid,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub policy_number: Option<String>,
+    pub group_number: Option<String>,
+    pub member_id: Option<String>,
+    pub coverage_type: Option<String>,
+    pub authorization_required: bool,
+    pub authorization_number: Option<String>,
+    pub claim_status: Option<String>,
+    pub claim_amount: Option<rust_decimal::Decimal>,
+    pub patient_responsibility: Option<rust_decimal::Decimal>,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn create_booking_insurance(
+    pool: &Pool,
+    booking_id: Uuid,
+    organization_id: Uuid,
+    policy_number: Option<&str>,
+    group_number: Option<&str>,
+    member_id: Option<&str>,
+    coverage_type: Option<&str>,
+    authorization_required: Option<bool>,
+    notes: Option<&str>,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO booking_insurance (booking_id, organization_id, policy_number, group_number, 
+                                        member_id, coverage_type, authorization_required, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, FALSE), $8)
+         RETURNING id",
+        &[&booking_id, &organization_id, &policy_number, &group_number, &member_id, &coverage_type, &authorization_required, &notes],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_booking_insurance(
+    pool: &Pool,
+    booking_id: Uuid,
+) -> Result<Option<BookingInsurance>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_opt(
+        "SELECT bi.id, bi.booking_id, bi.organization_id, o.name as organization_name,
+                bi.policy_number, bi.group_number, bi.member_id, bi.coverage_type,
+                bi.authorization_required, bi.authorization_number, bi.claim_status,
+                bi.claim_amount, bi.patient_responsibility, bi.notes,
+                bi.created_at, bi.updated_at
+         FROM booking_insurance bi
+         JOIN organizations o ON bi.organization_id = o.id
+         WHERE bi.booking_id = $1",
+        &[&booking_id],
+    ).await?;
+
+    match row {
+        Some(row) => Ok(Some(BookingInsurance {
+            id: row.get("id"),
+            booking_id: row.get("booking_id"),
+            organization_id: row.get("organization_id"),
+            organization_name: row.get("organization_name"),
+            policy_number: row.get("policy_number"),
+            group_number: row.get("group_number"),
+            member_id: row.get("member_id"),
+            coverage_type: row.get("coverage_type"),
+            authorization_required: row.get("authorization_required"),
+            authorization_number: row.get("authorization_number"),
+            claim_status: row.get("claim_status"),
+            claim_amount: row.get("claim_amount"),
+            patient_responsibility: row.get("patient_responsibility"),
+            notes: row.get("notes"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })),
+        None => Ok(None),
+    }
+}
+
+// Document Issuer struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DocumentIssuer {
+    pub id: Uuid,
+    pub document_id: Uuid,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub issuer_name: Option<String>,
+    pub issue_date: Option<NaiveDate>,
+    pub reference_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn create_document_issuer(
+    pool: &Pool,
+    document_id: Uuid,
+    organization_id: Uuid,
+    issuer_name: Option<&str>,
+    issue_date: Option<NaiveDate>,
+    reference_number: Option<&str>,
+    notes: Option<&str>,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO document_issuers (document_id, organization_id, issuer_name, issue_date, 
+                                       reference_number, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id",
+        &[&document_id, &organization_id, &issuer_name, &issue_date, &reference_number, &notes],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_document_issuers(
+    pool: &Pool,
+    document_id: Uuid,
+) -> Result<Vec<DocumentIssuer>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT di.id, di.document_id, di.organization_id, o.name as organization_name,
+                di.issuer_name, di.issue_date, di.reference_number, di.notes, di.created_at
+         FROM document_issuers di
+         JOIN organizations o ON di.organization_id = o.id
+         WHERE di.document_id = $1",
+        &[&document_id],
+    ).await?;
+
+    Ok(rows.into_iter().map(|row| DocumentIssuer {
+        id: row.get("id"),
+        document_id: row.get("document_id"),
+        organization_id: row.get("organization_id"),
+        organization_name: row.get("organization_name"),
+        issuer_name: row.get("issuer_name"),
+        issue_date: row.get("issue_date"),
+        reference_number: row.get("reference_number"),
+        notes: row.get("notes"),
+        created_at: row.get("created_at"),
+    }).collect())
+}

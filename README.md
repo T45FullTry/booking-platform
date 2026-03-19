@@ -26,7 +26,7 @@ A comprehensive medical appointment booking platform with voice and text interfa
 
 ### Database
 - **PostgreSQL**: Robust relational database with comprehensive medical entities
-- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings (with booker_id for proxy booking), Availability Slots, Consultations, Prescriptions, Documents
+- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings (with booker_id for proxy booking), Availability Slots, Consultations, Prescriptions, Documents, Organizations, Organization Types, Patient Employments, Clinician Affiliations, Booking Insurance, Document Issuers
 
 ## Project Structure
 
@@ -102,6 +102,24 @@ GET    /api/documents/{id}        # Get document details
 PUT    /api/documents/{id}        # Update document
 DELETE /api/documents/{id}        # Delete document
 GET    /api/documents/{id}/stream # Stream document content
+```
+
+### Organization Management (Port 8080)
+```
+GET    /api/organizations/types           # List all organization types (school, insurance, charity, etc.)
+POST   /api/organizations                 # Create new organization
+GET    /api/organizations                 # List organizations (filterable by type, status, location)
+GET    /api/organizations/{id}            # Get organization details
+PUT    /api/organizations/{id}            # Update organization
+DELETE /api/organizations/{id}            # Soft delete organization (sets status to inactive)
+POST   /api/patients/{id}/employments    # Record patient employment at organization
+GET    /api/patients/{id}/employments    # Get patient's employment history
+POST   /api/clinicians/{id}/affiliations # Record clinician affiliation with organization
+GET    /api/clinicians/{id}/affiliations # Get clinician's affiliations
+POST   /api/bookings/{id}/insurance      # Record insurance info for booking
+GET    /api/bookings/{id}/insurance      # Get booking insurance info
+POST   /api/documents/{id}/issuers       # Record document issuing organization
+GET    /api/documents/{id}/issuers       # Get document issuers
 ```
 
 ## Setup Instructions

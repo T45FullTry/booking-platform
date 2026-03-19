@@ -8,7 +8,11 @@ use crate::models::{
     CreateBookingRequest, BookingResponse, AvailabilityRequest, CancelBookingRequest,
     CreatePatientRequest, PatientResponse, ClinicianSearchRequest, ClinicianSearchResponse,
     CreateDocumentRequest, UpdateDocumentRequest, DocumentResponse, DocumentListResponse,
-    DocumentCategoryFilter,
+    DocumentCategoryFilter, CreateOrganizationTypeRequest, CreateOrganizationRequest,
+    UpdateOrganizationRequest, OrganizationResponse, OrganizationListResponse, OrganizationFilter,
+    CreatePatientEmploymentRequest, PatientEmploymentResponse, CreateClinicianAffiliationRequest,
+    ClinicianAffiliationResponse, CreateBookingInsuranceRequest, BookingInsuranceResponse,
+    CreateDocumentIssuerRequest, DocumentIssuerResponse,
 };
 use crate::db;
 
@@ -443,6 +447,549 @@ pub async fn stream_document(
     match crate::db::stream_document_content(&pool, *document_id).await {
         Ok(Some(content)) => Ok(HttpResponse::Ok().content_type("application/octet-stream").body(content)),
         Ok(None) => Ok(HttpResponse::NotFound().json("Document content not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Organization handlers
+pub async fn get_organization_types(pool: web::Data<PgPool>) -> Result<HttpResponse> {
+    match crate::db::get_organization_types(&pool).await {
+        Ok(types) => {
+            let responses: Vec<crate::models::OrganizationTypeResponse> = types.into_iter().map(|t| {
+                crate::models::OrganizationTypeResponse {
+                    id: t.id,
+                    name: t.name,
+                    description: t.description,
+                    created_at: t.created_at.to_rfc3339(),
+                }
+            }).collect();
+            Ok(HttpResponse::Ok().json(responses))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn create_organization(
+    pool: web::Data<PgPool>,
+    org_data: web::Json<CreateOrganizationRequest>,
+) -> Result<HttpResponse> {
+    let org = crate::db::Organization {
+        id: Uuid::new_v4(),
+        name: org_data.name.clone(),
+        organization_type_id: org_data.organization_type_id,
+        organization_type_name: String::new(), // Will be populated on fetch
+        registration_number: org_data.registration_number.clone(),
+        tax_id: org_data.tax_id.clone(),
+        website: org_data.website.clone(),
+        email: org_data.email.clone(),
+        phone: org_data.phone.clone(),
+        fax: org_data.fax.clone(),
+        address: org_data.address.clone(),
+        city: org_data.city.clone(),
+        state_province: org_data.state_province.clone(),
+        postal_code: org_data.postal_code.clone(),
+        country: org_data.country.clone(),
+        contact_person_name: org_data.contact_person_name.clone(),
+        contact_person_email: org_data.contact_person_email.clone(),
+        contact_person_phone: org_data.contact_person_phone.clone(),
+        notes: org_data.notes.clone(),
+        status: "active".to_string(),
+        metadata: org_data.metadata.clone(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+
+    match crate::db::create_organization(&pool, &org).await {
+        Ok(org_id) => {
+            let created_org = crate::db::get_organization(&pool, org_id).await.ok().flatten();
+            match created_org {
+                Some(o) => {
+                    let response = OrganizationResponse {
+                        id: o.id,
+                        name: o.name,
+                        organization_type_id: o.organization_type_id,
+                        organization_type_name: o.organization_type_name,
+                        registration_number: o.registration_number,
+                        tax_id: o.tax_id,
+                        website: o.website,
+                        email: o.email,
+                        phone: o.phone,
+                        fax: o.fax,
+                        address: o.address,
+                        city: o.city,
+                        state_province: o.state_province,
+                        postal_code: o.postal_code,
+                        country: o.country,
+                        contact_person_name: o.contact_person_name,
+                        contact_person_email: o.contact_person_email,
+                        contact_person_phone: o.contact_person_phone,
+                        notes: o.notes,
+                        status: o.status,
+                        metadata: o.metadata,
+                        created_at: o.created_at.to_rfc3339(),
+                        updated_at: o.updated_at.to_rfc3339(),
+                    };
+                    Ok(HttpResponse::Created().json(response))
+                }
+                None => Ok(HttpResponse::InternalServerError().json("Failed to fetch created organization")),
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_organization(
+    pool: web::Data<PgPool>,
+    organization_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_organization(&pool, *organization_id).await {
+        Ok(Some(org)) => {
+            let response = OrganizationResponse {
+                id: org.id,
+                name: org.name,
+                organization_type_id: org.organization_type_id,
+                organization_type_name: org.organization_type_name,
+                registration_number: org.registration_number,
+                tax_id: org.tax_id,
+                website: org.website,
+                email: org.email,
+                phone: org.phone,
+                fax: org.fax,
+                address: org.address,
+                city: org.city,
+                state_province: org.state_province,
+                postal_code: org.postal_code,
+                country: org.country,
+                contact_person_name: org.contact_person_name,
+                contact_person_email: org.contact_person_email,
+                contact_person_phone: org.contact_person_phone,
+                notes: org.notes,
+                status: org.status,
+                metadata: org.metadata,
+                created_at: org.created_at.to_rfc3339(),
+                updated_at: org.updated_at.to_rfc3339(),
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Ok(None) => Ok(HttpResponse::NotFound().json("Organization not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_organizations(
+    pool: web::Data<PgPool>,
+    filter: web::Query<OrganizationFilter>,
+) -> Result<HttpResponse> {
+    let page = filter.page.unwrap_or(0);
+    let limit = filter.limit.unwrap_or(20);
+
+    match crate::db::get_organizations(
+        &pool,
+        filter.organization_type_name.as_deref(),
+        filter.status.as_deref(),
+        page,
+        limit,
+    ).await {
+        Ok(orgs) => {
+            let responses: Vec<OrganizationResponse> = orgs.into_iter().map(|org| {
+                OrganizationResponse {
+                    id: org.id,
+                    name: org.name,
+                    organization_type_id: org.organization_type_id,
+                    organization_type_name: org.organization_type_name,
+                    registration_number: org.registration_number,
+                    tax_id: org.tax_id,
+                    website: org.website,
+                    email: org.email,
+                    phone: org.phone,
+                    fax: org.fax,
+                    address: org.address,
+                    city: org.city,
+                    state_province: org.state_province,
+                    postal_code: org.postal_code,
+                    country: org.country,
+                    contact_person_name: org.contact_person_name,
+                    contact_person_email: org.contact_person_email,
+                    contact_person_phone: org.contact_person_phone,
+                    notes: org.notes,
+                    status: org.status,
+                    metadata: org.metadata,
+                    created_at: org.created_at.to_rfc3339(),
+                    updated_at: org.updated_at.to_rfc3339(),
+                }
+            }).collect();
+
+            let response = OrganizationListResponse {
+                organizations: responses,
+                total_count: responses.len(),
+                page,
+                has_more: responses.len() == limit,
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn update_organization(
+    pool: web::Data<PgPool>,
+    organization_id: web::Path<Uuid>,
+    update_data: web::Json<UpdateOrganizationRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::update_organization(
+        &pool,
+        *organization_id,
+        update_data.name.as_deref(),
+        update_data.organization_type_id,
+        update_data.registration_number.as_deref(),
+        update_data.tax_id.as_deref(),
+        update_data.website.as_deref(),
+        update_data.email.as_deref(),
+        update_data.phone.as_deref(),
+        update_data.address.as_deref(),
+        update_data.city.as_deref(),
+        update_data.state_province.as_deref(),
+        update_data.postal_code.as_deref(),
+        update_data.country.as_deref(),
+        update_data.contact_person_name.as_deref(),
+        update_data.contact_person_email.as_deref(),
+        update_data.contact_person_phone.as_deref(),
+        update_data.notes.as_deref(),
+        update_data.status.as_deref(),
+        update_data.metadata.as_ref(),
+    ).await {
+        Ok(true) => {
+            let updated_org = crate::db::get_organization(&pool, *organization_id).await.ok().flatten();
+            match updated_org {
+                Some(o) => {
+                    let response = OrganizationResponse {
+                        id: o.id,
+                        name: o.name,
+                        organization_type_id: o.organization_type_id,
+                        organization_type_name: o.organization_type_name,
+                        registration_number: o.registration_number,
+                        tax_id: o.tax_id,
+                        website: o.website,
+                        email: o.email,
+                        phone: o.phone,
+                        fax: o.fax,
+                        address: o.address,
+                        city: o.city,
+                        state_province: o.state_province,
+                        postal_code: o.postal_code,
+                        country: o.country,
+                        contact_person_name: o.contact_person_name,
+                        contact_person_email: o.contact_person_email,
+                        contact_person_phone: o.contact_person_phone,
+                        notes: o.notes,
+                        status: o.status,
+                        metadata: o.metadata,
+                        created_at: o.created_at.to_rfc3339(),
+                        updated_at: o.updated_at.to_rfc3339(),
+                    };
+                    Ok(HttpResponse::Ok().json(response))
+                }
+                None => Ok(HttpResponse::NotFound().json("Organization not found")),
+            }
+        }
+        Ok(false) => Ok(HttpResponse::NotFound().json("Organization not found or no changes made")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn delete_organization(
+    pool: web::Data<PgPool>,
+    organization_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::delete_organization(&pool, *organization_id).await {
+        Ok(true) => Ok(HttpResponse::Ok().json("Organization deleted successfully")),
+        Ok(false) => Ok(HttpResponse::NotFound().json("Organization not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Patient Employment handlers
+pub async fn create_patient_employment(
+    pool: web::Data<PgPool>,
+    emp_data: web::Json<CreatePatientEmploymentRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::create_patient_employment(
+        &pool,
+        emp_data.patient_id,
+        emp_data.organization_id,
+        emp_data.job_title.as_deref(),
+        emp_data.department.as_deref(),
+        emp_data.employee_id.as_deref(),
+        emp_data.start_date,
+        emp_data.notes.as_deref(),
+    ).await {
+        Ok(emp_id) => {
+            let employments = crate::db::get_patient_employments(&pool, emp_data.patient_id).await.ok().unwrap_or_default();
+            if let Some(emp) = employments.into_iter().find(|e| e.id == emp_id) {
+                let response = PatientEmploymentResponse {
+                    id: emp.id,
+                    patient_id: emp.patient_id,
+                    patient_name: emp.patient_name,
+                    organization_id: emp.organization_id,
+                    organization_name: emp.organization_name,
+                    job_title: emp.job_title,
+                    department: emp.department,
+                    employee_id: emp.employee_id,
+                    start_date: emp.start_date,
+                    end_date: emp.end_date,
+                    is_current: emp.is_current,
+                    notes: emp.notes,
+                    created_at: emp.created_at.to_rfc3339(),
+                    updated_at: emp.updated_at.to_rfc3339(),
+                };
+                Ok(HttpResponse::Created().json(response))
+            } else {
+                Ok(HttpResponse::InternalServerError().json("Failed to fetch created employment"))
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_patient_employments(
+    pool: web::Data<PgPool>,
+    patient_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_patient_employments(&pool, *patient_id).await {
+        Ok(employments) => {
+            let responses: Vec<PatientEmploymentResponse> = employments.into_iter().map(|emp| {
+                PatientEmploymentResponse {
+                    id: emp.id,
+                    patient_id: emp.patient_id,
+                    patient_name: emp.patient_name,
+                    organization_id: emp.organization_id,
+                    organization_name: emp.organization_name,
+                    job_title: emp.job_title,
+                    department: emp.department,
+                    employee_id: emp.employee_id,
+                    start_date: emp.start_date,
+                    end_date: emp.end_date,
+                    is_current: emp.is_current,
+                    notes: emp.notes,
+                    created_at: emp.created_at.to_rfc3339(),
+                    updated_at: emp.updated_at.to_rfc3339(),
+                }
+            }).collect();
+            Ok(HttpResponse::Ok().json(responses))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Clinician Affiliation handlers
+pub async fn create_clinician_affiliation(
+    pool: web::Data<PgPool>,
+    aff_data: web::Json<CreateClinicianAffiliationRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::create_clinician_affiliation(
+        &pool,
+        aff_data.clinician_id,
+        aff_data.organization_id,
+        aff_data.affiliation_type.as_deref(),
+        aff_data.department.as_deref(),
+        aff_data.start_date,
+        aff_data.is_primary,
+        aff_data.notes.as_deref(),
+    ).await {
+        Ok(aff_id) => {
+            let affiliations = crate::db::get_clinician_affiliations(&pool, aff_data.clinician_id).await.ok().unwrap_or_default();
+            if let Some(aff) = affiliations.into_iter().find(|a| a.id == aff_id) {
+                let response = ClinicianAffiliationResponse {
+                    id: aff.id,
+                    clinician_id: aff.clinician_id,
+                    clinician_name: aff.clinician_name,
+                    organization_id: aff.organization_id,
+                    organization_name: aff.organization_name,
+                    affiliation_type: aff.affiliation_type,
+                    department: aff.department,
+                    start_date: aff.start_date,
+                    end_date: aff.end_date,
+                    is_primary: aff.is_primary,
+                    is_current: aff.is_current,
+                    notes: aff.notes,
+                    created_at: aff.created_at.to_rfc3339(),
+                    updated_at: aff.updated_at.to_rfc3339(),
+                };
+                Ok(HttpResponse::Created().json(response))
+            } else {
+                Ok(HttpResponse::InternalServerError().json("Failed to fetch created affiliation"))
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_clinician_affiliations(
+    pool: web::Data<PgPool>,
+    clinician_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_clinician_affiliations(&pool, *clinician_id).await {
+        Ok(affiliations) => {
+            let responses: Vec<ClinicianAffiliationResponse> = affiliations.into_iter().map(|aff| {
+                ClinicianAffiliationResponse {
+                    id: aff.id,
+                    clinician_id: aff.clinician_id,
+                    clinician_name: aff.clinician_name,
+                    organization_id: aff.organization_id,
+                    organization_name: aff.organization_name,
+                    affiliation_type: aff.affiliation_type,
+                    department: aff.department,
+                    start_date: aff.start_date,
+                    end_date: aff.end_date,
+                    is_primary: aff.is_primary,
+                    is_current: aff.is_current,
+                    notes: aff.notes,
+                    created_at: aff.created_at.to_rfc3339(),
+                    updated_at: aff.updated_at.to_rfc3339(),
+                }
+            }).collect();
+            Ok(HttpResponse::Ok().json(responses))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Booking Insurance handlers
+pub async fn create_booking_insurance(
+    pool: web::Data<PgPool>,
+    ins_data: web::Json<CreateBookingInsuranceRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::create_booking_insurance(
+        &pool,
+        ins_data.booking_id,
+        ins_data.organization_id,
+        ins_data.policy_number.as_deref(),
+        ins_data.group_number.as_deref(),
+        ins_data.member_id.as_deref(),
+        ins_data.coverage_type.as_deref(),
+        ins_data.authorization_required,
+        ins_data.notes.as_deref(),
+    ).await {
+        Ok(ins_id) => {
+            let insurance = crate::db::get_booking_insurance(&pool, ins_data.booking_id).await.ok().flatten();
+            match insurance {
+                Some(i) => {
+                    let response = BookingInsuranceResponse {
+                        id: i.id,
+                        booking_id: i.booking_id,
+                        organization_id: i.organization_id,
+                        organization_name: i.organization_name,
+                        policy_number: i.policy_number,
+                        group_number: i.group_number,
+                        member_id: i.member_id,
+                        coverage_type: i.coverage_type,
+                        authorization_required: i.authorization_required,
+                        authorization_number: i.authorization_number,
+                        claim_status: i.claim_status,
+                        claim_amount: i.claim_amount,
+                        patient_responsibility: i.patient_responsibility,
+                        notes: i.notes,
+                        created_at: i.created_at.to_rfc3339(),
+                        updated_at: i.updated_at.to_rfc3339(),
+                    };
+                    Ok(HttpResponse::Created().json(response))
+                }
+                None => Ok(HttpResponse::InternalServerError().json("Failed to fetch created insurance")),
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_booking_insurance(
+    pool: web::Data<PgPool>,
+    booking_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_booking_insurance(&pool, *booking_id).await {
+        Ok(Some(insurance)) => {
+            let response = BookingInsuranceResponse {
+                id: insurance.id,
+                booking_id: insurance.booking_id,
+                organization_id: insurance.organization_id,
+                organization_name: insurance.organization_name,
+                policy_number: insurance.policy_number,
+                group_number: insurance.group_number,
+                member_id: insurance.member_id,
+                coverage_type: insurance.coverage_type,
+                authorization_required: insurance.authorization_required,
+                authorization_number: insurance.authorization_number,
+                claim_status: insurance.claim_status,
+                claim_amount: insurance.claim_amount,
+                patient_responsibility: insurance.patient_responsibility,
+                notes: insurance.notes,
+                created_at: insurance.created_at.to_rfc3339(),
+                updated_at: insurance.updated_at.to_rfc3339(),
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Ok(None) => Ok(HttpResponse::NotFound().json("Insurance info not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Document Issuer handlers
+pub async fn create_document_issuer(
+    pool: web::Data<PgPool>,
+    issuer_data: web::Json<CreateDocumentIssuerRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::create_document_issuer(
+        &pool,
+        issuer_data.document_id,
+        issuer_data.organization_id,
+        issuer_data.issuer_name.as_deref(),
+        issuer_data.issue_date,
+        issuer_data.reference_number.as_deref(),
+        issuer_data.notes.as_deref(),
+    ).await {
+        Ok(issuer_id) => {
+            let issuers = crate::db::get_document_issuers(&pool, issuer_data.document_id).await.ok().unwrap_or_default();
+            if let Some(issuer) = issuers.into_iter().find(|i| i.id == issuer_id) {
+                let response = DocumentIssuerResponse {
+                    id: issuer.id,
+                    document_id: issuer.document_id,
+                    organization_id: issuer.organization_id,
+                    organization_name: issuer.organization_name,
+                    issuer_name: issuer.issuer_name,
+                    issue_date: issuer.issue_date,
+                    reference_number: issuer.reference_number,
+                    notes: issuer.notes,
+                    created_at: issuer.created_at.to_rfc3339(),
+                };
+                Ok(HttpResponse::Created().json(response))
+            } else {
+                Ok(HttpResponse::InternalServerError().json("Failed to fetch created issuer"))
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_document_issuers(
+    pool: web::Data<PgPool>,
+    document_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_document_issuers(&pool, *document_id).await {
+        Ok(issuers) => {
+            let responses: Vec<DocumentIssuerResponse> = issuers.into_iter().map(|issuer| {
+                DocumentIssuerResponse {
+                    id: issuer.id,
+                    document_id: issuer.document_id,
+                    organization_id: issuer.organization_id,
+                    organization_name: issuer.organization_name,
+                    issuer_name: issuer.issuer_name,
+                    issue_date: issuer.issue_date,
+                    reference_number: issuer.reference_number,
+                    notes: issuer.notes,
+                    created_at: issuer.created_at.to_rfc3339(),
+                }
+            }).collect();
+            Ok(HttpResponse::Ok().json(responses))
+        }
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
     }
 }

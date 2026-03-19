@@ -51,6 +51,35 @@ async fn main() -> std::io::Result<()> {
                             .route("/{id}", web::delete().to(handlers::delete_document))
                             .route("/{id}/stream", web::get().to(handlers::stream_document))
                     )
+                    .service(
+                        web::scope("/organizations")
+                            .route("/types", web::get().to(handlers::get_organization_types))
+                            .route("", web::post().to(handlers::create_organization))
+                            .route("", web::get().to(handlers::get_organizations))
+                            .route("/{id}", web::get().to(handlers::get_organization))
+                            .route("/{id}", web::put().to(handlers::update_organization))
+                            .route("/{id}", web::delete().to(handlers::delete_organization))
+                    )
+                    .service(
+                        web::scope("/patients")
+                            .route("/{id}/employments", web::post().to(handlers::create_patient_employment))
+                            .route("/{id}/employments", web::get().to(handlers::get_patient_employments))
+                    )
+                    .service(
+                        web::scope("/clinicians")
+                            .route("/{id}/affiliations", web::post().to(handlers::create_clinician_affiliation))
+                            .route("/{id}/affiliations", web::get().to(handlers::get_clinician_affiliations))
+                    )
+                    .service(
+                        web::scope("/bookings")
+                            .route("/{id}/insurance", web::post().to(handlers::create_booking_insurance))
+                            .route("/{id}/insurance", web::get().to(handlers::get_booking_insurance))
+                    )
+                    .service(
+                        web::scope("/documents")
+                            .route("/{id}/issuers", web::post().to(handlers::create_document_issuer))
+                            .route("/{id}/issuers", web::get().to(handlers::get_document_issuers))
+                    )
             )
     })
     .bind("127.0.0.1:8080")?

@@ -198,3 +198,231 @@ pub struct DocumentCategoryFilter {
     pub page: Option<usize>,
     pub limit: Option<usize>,
 }
+
+// Organization models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateOrganizationTypeRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrganizationTypeResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateOrganizationRequest {
+    pub name: String,
+    pub organization_type_id: Uuid,
+    pub registration_number: Option<String>,
+    pub tax_id: Option<String>,
+    pub website: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub fax: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub contact_person_name: Option<String>,
+    pub contact_person_email: Option<String>,
+    pub contact_person_phone: Option<String>,
+    pub notes: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateOrganizationRequest {
+    pub name: Option<String>,
+    pub organization_type_id: Option<Uuid>,
+    pub registration_number: Option<String>,
+    pub tax_id: Option<String>,
+    pub website: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub contact_person_name: Option<String>,
+    pub contact_person_email: Option<String>,
+    pub contact_person_phone: Option<String>,
+    pub notes: Option<String>,
+    pub status: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrganizationResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub organization_type_id: Uuid,
+    pub organization_type_name: String,
+    pub registration_number: Option<String>,
+    pub tax_id: Option<String>,
+    pub website: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub fax: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub contact_person_name: Option<String>,
+    pub contact_person_email: Option<String>,
+    pub contact_person_phone: Option<String>,
+    pub notes: Option<String>,
+    pub status: String,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrganizationListResponse {
+    pub organizations: Vec<OrganizationResponse>,
+    pub total_count: usize,
+    pub page: usize,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrganizationFilter {
+    pub organization_type_id: Option<Uuid>,
+    pub organization_type_name: Option<String>,
+    pub status: Option<String>,
+    pub country: Option<String>,
+    pub city: Option<String>,
+    pub page: Option<usize>,
+    pub limit: Option<usize>,
+}
+
+// Patient Employment models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreatePatientEmploymentRequest {
+    pub patient_id: Uuid,
+    pub organization_id: Uuid,
+    pub job_title: Option<String>,
+    pub department: Option<String>,
+    pub employee_id: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PatientEmploymentResponse {
+    pub id: Uuid,
+    pub patient_id: Uuid,
+    pub patient_name: String,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub job_title: Option<String>,
+    pub department: Option<String>,
+    pub employee_id: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub is_current: bool,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Clinician Affiliation models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateClinicianAffiliationRequest {
+    pub clinician_id: Uuid,
+    pub organization_id: Uuid,
+    pub affiliation_type: Option<String>,
+    pub department: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub is_primary: Option<bool>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ClinicianAffiliationResponse {
+    pub id: Uuid,
+    pub clinician_id: Uuid,
+    pub clinician_name: String,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub affiliation_type: Option<String>,
+    pub department: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub is_primary: bool,
+    pub is_current: bool,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Booking Insurance models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateBookingInsuranceRequest {
+    pub booking_id: Uuid,
+    pub organization_id: Uuid,
+    pub policy_number: Option<String>,
+    pub group_number: Option<String>,
+    pub member_id: Option<String>,
+    pub coverage_type: Option<String>,
+    pub authorization_required: Option<bool>,
+    pub authorization_number: Option<String>,
+    pub claim_status: Option<String>,
+    pub claim_amount: Option<rust_decimal::Decimal>,
+    pub patient_responsibility: Option<rust_decimal::Decimal>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BookingInsuranceResponse {
+    pub id: Uuid,
+    pub booking_id: Uuid,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub policy_number: Option<String>,
+    pub group_number: Option<String>,
+    pub member_id: Option<String>,
+    pub coverage_type: Option<String>,
+    pub authorization_required: bool,
+    pub authorization_number: Option<String>,
+    pub claim_status: Option<String>,
+    pub claim_amount: Option<rust_decimal::Decimal>,
+    pub patient_responsibility: Option<rust_decimal::Decimal>,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Document Issuer models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateDocumentIssuerRequest {
+    pub document_id: Uuid,
+    pub organization_id: Uuid,
+    pub issuer_name: Option<String>,
+    pub issue_date: Option<NaiveDate>,
+    pub reference_number: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DocumentIssuerResponse {
+    pub id: Uuid,
+    pub document_id: Uuid,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub issuer_name: Option<String>,
+    pub issue_date: Option<NaiveDate>,
+    pub reference_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
