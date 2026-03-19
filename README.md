@@ -26,7 +26,7 @@ A comprehensive medical appointment booking platform with voice and text interfa
 
 ### Database
 - **PostgreSQL**: Robust relational database with comprehensive medical entities
-- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings (with booker_id for proxy booking), Availability Slots, Consultations, Prescriptions, Documents, Organizations, Organization Types, Patient Employments, Clinician Affiliations, Booking Insurance, Document Issuers
+- **Entities**: Patients, Clinicians, Services, Symptoms, Conditions, Bookings (with booker_id for proxy booking), Availability Slots, Consultations, Prescriptions, Documents, Organizations, Organization Types, Patient Employments, Clinician Affiliations, Booking Insurance, Document Issuers, Service Rules
 
 ## Project Structure
 
@@ -121,6 +121,25 @@ GET    /api/bookings/{id}/insurance      # Get booking insurance info
 POST   /api/documents/{id}/issuers       # Record document issuing organization
 GET    /api/documents/{id}/issuers       # Get document issuers
 ```
+
+### Service Rules & Eligibility (Port 8080)
+```
+POST   /api/services/{id}/rules          # Add rule to service (age, gender, recurrence)
+GET    /api/services/{id}/rules          # Get all rules for a service
+PUT    /api/services/rules/{id}          # Update service rule
+DELETE /api/services/rules/{id}          # Delete service rule
+POST   /api/services/{id}/eligibility    # Check if patient is eligible for service
+GET    /api/services/{patient_id}/available # Get all services available to patient
+```
+
+**Service Rule Types:**
+- **age_min**: Minimum age required (e.g., mammography age 40+)
+- **age_max**: Maximum age allowed (e.g., pediatric services)
+- **gender_required**: Gender restriction ('M', 'F', or 'ANY')
+- **recurrence_interval**: Time between appointments (numeric value)
+- **recurrence_unit**: Unit for recurrence ('days', 'weeks', 'months', 'years')
+- **appointment_limit**: Max appointments per period
+- **prerequisite_service**: Required service before this one
 
 ## Setup Instructions
 

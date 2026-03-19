@@ -80,6 +80,15 @@ async fn main() -> std::io::Result<()> {
                             .route("/{id}/issuers", web::post().to(handlers::create_document_issuer))
                             .route("/{id}/issuers", web::get().to(handlers::get_document_issuers))
                     )
+                    .service(
+                        web::scope("/services")
+                            .route("/{id}/rules", web::post().to(handlers::create_service_rule))
+                            .route("/{id}/rules", web::get().to(handlers::get_service_rules))
+                            .route("/rules/{id}", web::put().to(handlers::update_service_rule))
+                            .route("/rules/{id}", web::delete().to(handlers::delete_service_rule))
+                            .route("/{id}/eligibility", web::post().to(handlers::check_service_eligibility))
+                            .route("/{patient_id}/available", web::get().to(handlers::get_available_services))
+                    )
             )
     })
     .bind("127.0.0.1:8080")?

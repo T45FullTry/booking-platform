@@ -426,3 +426,89 @@ pub struct DocumentIssuerResponse {
     pub notes: Option<String>,
     pub created_at: String,
 }
+
+// Service Rule models
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateServiceRuleRequest {
+    pub service_id: Uuid,
+    pub rule_type: String, // age_min, age_max, gender_required, recurrence_interval, recurrence_unit, appointment_limit, prerequisite_service
+    pub rule_value: Option<String>,
+    pub rule_value_numeric: Option<i32>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateServiceRuleRequest {
+    pub rule_type: Option<String>,
+    pub rule_value: Option<String>,
+    pub rule_value_numeric: Option<i32>,
+    pub description: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ServiceRuleResponse {
+    pub id: Uuid,
+    pub service_id: Uuid,
+    pub service_name: String,
+    pub rule_type: String,
+    pub rule_value: Option<String>,
+    pub rule_value_numeric: Option<i32>,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ServiceRuleListResponse {
+    pub rules: Vec<ServiceRuleResponse>,
+    pub total_count: usize,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ServiceEligibilityRequest {
+    pub patient_id: Uuid,
+    pub service_id: Uuid,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ServiceEligibilityResponse {
+    pub service_id: Uuid,
+    pub service_name: String,
+    pub patient_id: Uuid,
+    pub eligible: bool,
+    pub reason: String,
+    pub failed_rules: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AvailableServiceResponse {
+    pub service_id: Uuid,
+    pub service_name: String,
+    pub description: Option<String>,
+    pub duration_minutes: i32,
+    pub price: Option<rust_decimal::Decimal>,
+    pub category: Option<String>,
+    pub eligibility_status: bool,
+    pub eligibility_reason: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AvailableServicesListResponse {
+    pub services: Vec<AvailableServiceResponse>,
+    pub patient_id: Uuid,
+}
+
+// Updated BookingRequest to include service_id for validation
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateBookingWithServiceCheckRequest {
+    pub patient_id: Uuid,
+    pub booker_id: Uuid,
+    pub service_id: Uuid,
+    pub clinician_id: Option<Uuid>,
+    pub booking_date: NaiveDate,
+    pub booking_time: NaiveTime,
+    pub symptoms_reported: Option<Vec<String>>,
+    pub consultation_reason: Option<String>,
+}

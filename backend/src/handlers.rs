@@ -12,7 +12,9 @@ use crate::models::{
     UpdateOrganizationRequest, OrganizationResponse, OrganizationListResponse, OrganizationFilter,
     CreatePatientEmploymentRequest, PatientEmploymentResponse, CreateClinicianAffiliationRequest,
     ClinicianAffiliationResponse, CreateBookingInsuranceRequest, BookingInsuranceResponse,
-    CreateDocumentIssuerRequest, DocumentIssuerResponse,
+    CreateDocumentIssuerRequest, DocumentIssuerResponse, CreateServiceRuleRequest,
+    UpdateServiceRuleRequest, ServiceRuleResponse, ServiceRuleListResponse,
+    ServiceEligibilityRequest, ServiceEligibilityResponse, AvailableServicesListResponse,
 };
 use crate::db;
 
@@ -989,6 +991,167 @@ pub async fn get_document_issuers(
                 }
             }).collect();
             Ok(HttpResponse::Ok().json(responses))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+// Service Rule handlers
+pub async fn create_service_rule(
+    pool: web::Data<PgPool>,
+    rule_data: web::Json<CreateServiceRuleRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::create_service_rule(
+        &pool,
+        rule_data.service_id,
+        &rule_data.rule_type,
+        rule_data.rule_value.as_deref(),
+        rule_data.rule_value_numeric,
+        rule_data.description.as_deref(),
+    ).await {
+        Ok(rule_id) => {
+            let rules = crate::db::get_service_rules(&pool, rule_data.service_id).await.ok().unwrap_or_default();
+            if let Some(rule) = rules.into_iter().find(|r| r.id == rule_id) {
+                let response = ServiceRuleResponse {
+                    id: rule.id,
+                    service_id: rule.service_id,
+                    service_name: rule.service_name,
+                    rule_type: rule.rule_type,
+                    rule_value: rule.rule_value,
+                    rule_value_numeric: rule.rule_value_numeric,
+                    description: rule.description,
+                    is_active: rule.is_active,
+                    created_at: rule.created_at.to_rfc3339(),
+                    updated_at: rule.updated_at.to_rfc3339(),
+                };
+                Ok(HttpResponse::Created().json(response))
+            } else {
+                Ok(HttpResponse::InternalServerError().json("Failed to fetch created rule"))
+            }
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_service_rules(
+    pool: web::Data<PgPool>,
+    service_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_service_rules(&pool, *service_id).await {
+        Ok(rules) => {
+            let responses: Vec<ServiceRuleResponse> = rules.into_iter().map(|rule| {
+                ServiceRuleResponse {
+                    id: rule.id,
+                    service_id: rule.service_id,
+                    service_name: rule.service_name,
+                    rule_type: rule.rule_type,
+                    rule_value: rule.rule_value,
+                    rule_value_numeric: rule.rule_value_numeric,
+                    description: rule.description,
+                    is_active: rule.is_active,
+                    created_at: rule.created_at.to_rfc3339(),
+                    updated_at: rule.updated_at.to_rfc3339(),
+                }
+            }).collect();
+
+            let response = ServiceRuleListResponse {
+                rules: responses,
+                total_count: responses.len(),
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn update_service_rule(
+    pool: web::Data<PgPool>,
+    rule_id: web::Path<Uuid>,
+    update_data: web::Json<UpdateServiceRuleRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::update_service_rule(
+        &pool,
+        *rule_id,
+        update_data.rule_type.as_deref(),
+        update_data.rule_value.as_deref(),
+        update_data.rule_value_numeric,
+        update_data.description.as_deref(),
+        update_data.is_active,
+    ).await {
+        Ok(true) => {
+            // Get the rule to return updated data
+            let rules = crate::db::get_all_active_service_rules(&pool).await.ok().unwrap_or_default();
+            if let Some(rule) = rules.into_iter().find(|r| r.id == *rule_id) {
+                let response = ServiceRuleResponse {
+                    id: rule.id,
+                    service_id: rule.service_id,
+                    service_name: rule.service_name,
+                    rule_type: rule.rule_type,
+                    rule_value: rule.rule_value,
+                    rule_value_numeric: rule.rule_value_numeric,
+                    description: rule.description,
+                    is_active: rule.is_active,
+                    created_at: rule.created_at.to_rfc3339(),
+                    updated_at: rule.updated_at.to_rfc3339(),
+                };
+                Ok(HttpResponse::Ok().json(response))
+            } else {
+                Ok(HttpResponse::NotFound().json("Rule not found"))
+            }
+        }
+        Ok(false) => Ok(HttpResponse::NotFound().json("Rule not found or no changes made")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn delete_service_rule(
+    pool: web::Data<PgPool>,
+    rule_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::delete_service_rule(&pool, *rule_id).await {
+        Ok(true) => Ok(HttpResponse::Ok().json("Service rule deleted successfully")),
+        Ok(false) => Ok(HttpResponse::NotFound().json("Service rule not found")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn check_service_eligibility(
+    pool: web::Data<PgPool>,
+    eligibility_data: web::Json<ServiceEligibilityRequest>,
+) -> Result<HttpResponse> {
+    match crate::db::check_service_eligibility(&pool, eligibility_data.patient_id, eligibility_data.service_id).await {
+        Ok((eligible, reason, failed_rules)) => {
+            // Get service name
+            let service_name = match crate::db::get_service(&pool, eligibility_data.service_id).await {
+                Ok(Some(service)) => service.name,
+                _ => "Unknown".to_string(),
+            };
+
+            let response = ServiceEligibilityResponse {
+                service_id: eligibility_data.service_id,
+                service_name,
+                patient_id: eligibility_data.patient_id,
+                eligible,
+                reason,
+                failed_rules,
+            };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+pub async fn get_available_services(
+    pool: web::Data<PgPool>,
+    patient_id: web::Path<Uuid>,
+) -> Result<HttpResponse> {
+    match crate::db::get_available_services_for_patient(&pool, *patient_id).await {
+        Ok(services) => {
+            let response = AvailableServicesListResponse {
+                services,
+                patient_id: *patient_id,
+            };
+            Ok(HttpResponse::Ok().json(response))
         }
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
     }

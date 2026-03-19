@@ -1285,3 +1285,364 @@ pub async fn get_document_issuers(
         created_at: row.get("created_at"),
     }).collect())
 }
+
+// Service Rule struct
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ServiceRule {
+    pub id: Uuid,
+    pub service_id: Uuid,
+    pub service_name: String,
+    pub rule_type: String,
+    pub rule_value: Option<String>,
+    pub rule_value_numeric: Option<i32>,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Service Rule operations
+pub async fn create_service_rule(
+    pool: &Pool,
+    service_id: Uuid,
+    rule_type: &str,
+    rule_value: Option<&str>,
+    rule_value_numeric: Option<i32>,
+    description: Option<&str>,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let row = client.query_one(
+        "INSERT INTO service_rules (service_id, rule_type, rule_value, rule_value_numeric, description)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id",
+        &[&service_id, &rule_type, &rule_value, &rule_value_numeric, &description],
+    ).await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn get_service_rules(
+    pool: &Pool,
+    service_id: Uuid,
+) -> Result<Vec<ServiceRule>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT sr.id, sr.service_id, s.name as service_name, sr.rule_type,
+                sr.rule_value, sr.rule_value_numeric, sr.description, sr.is_active,
+                sr.created_at, sr.updated_at
+         FROM service_rules sr
+         JOIN services s ON sr.service_id = s.id
+         WHERE sr.service_id = $1
+         ORDER BY sr.rule_type",
+        &[&service_id],
+    ).await?;
+
+    Ok(rows.into_iter().map(|row| ServiceRule {
+        id: row.get("id"),
+        service_id: row.get("service_id"),
+        service_name: row.get("service_name"),
+        rule_type: row.get("rule_type"),
+        rule_value: row.get("rule_value"),
+        rule_value_numeric: row.get("rule_value_numeric"),
+        description: row.get("description"),
+        is_active: row.get("is_active"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+pub async fn get_all_active_service_rules(
+    pool: &Pool,
+) -> Result<Vec<ServiceRule>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let rows = client.query(
+        "SELECT sr.id, sr.service_id, s.name as service_name, sr.rule_type,
+                sr.rule_value, sr.rule_value_numeric, sr.description, sr.is_active,
+                sr.created_at, sr.updated_at
+         FROM service_rules sr
+         JOIN services s ON sr.service_id = s.id
+         WHERE sr.is_active = TRUE
+         ORDER BY s.name, sr.rule_type",
+        &[],
+    ).await?;
+
+    Ok(rows.into_iter().map(|row| ServiceRule {
+        id: row.get("id"),
+        service_id: row.get("service_id"),
+        service_name: row.get("service_name"),
+        rule_type: row.get("rule_type"),
+        rule_value: row.get("rule_value"),
+        rule_value_numeric: row.get("rule_value_numeric"),
+        description: row.get("description"),
+        is_active: row.get("is_active"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }).collect())
+}
+
+pub async fn update_service_rule(
+    pool: &Pool,
+    rule_id: Uuid,
+    rule_type: Option<&str>,
+    rule_value: Option<&str>,
+    rule_value_numeric: Option<i32>,
+    description: Option<&str>,
+    is_active: Option<bool>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+
+    let mut sets: Vec<String> = Vec::new();
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::new();
+    let mut param_idx = 1;
+
+    if let Some(rt) = rule_type {
+        sets.push(format!("rule_type = ${}", param_idx));
+        params.push(rt);
+        param_idx += 1;
+    }
+    if let Some(rv) = rule_value {
+        sets.push(format!("rule_value = ${}", param_idx));
+        params.push(rv);
+        param_idx += 1;
+    }
+    if let Some(rvn) = rule_value_numeric {
+        sets.push(format!("rule_value_numeric = ${}", param_idx));
+        params.push(&rvn);
+        param_idx += 1;
+    }
+    if let Some(d) = description {
+        sets.push(format!("description = ${}", param_idx));
+        params.push(d);
+        param_idx += 1;
+    }
+    if let Some(ia) = is_active {
+        sets.push(format!("is_active = ${}", param_idx));
+        params.push(&ia);
+        param_idx += 1;
+    }
+
+    if sets.is_empty() {
+        return Ok(false);
+    }
+
+    params.push(&rule_id);
+    let query = format!(
+        "UPDATE service_rules SET {} WHERE id = ${}",
+        sets.join(", "),
+        param_idx
+    );
+
+    let result = client.execute(&query, &params).await?;
+    Ok(result > 0)
+}
+
+pub async fn delete_service_rule(
+    pool: &Pool,
+    rule_id: Uuid,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    let result = client.execute(
+        "DELETE FROM service_rules WHERE id = $1",
+        &[&rule_id],
+    ).await?;
+
+    Ok(result > 0)
+}
+
+// Service eligibility check
+pub async fn check_service_eligibility(
+    pool: &Pool,
+    patient_id: Uuid,
+    service_id: Uuid,
+) -> Result<(bool, String, Vec<String>), Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    
+    // Get patient info
+    let patient_row = client.query_opt(
+        "SELECT date_of_birth, gender FROM patients WHERE id = $1",
+        &[&patient_id],
+    ).await?;
+    
+    match patient_row {
+        Some(row) => {
+            let dob: NaiveDate = row.get("date_of_birth");
+            let gender: Option<String> = row.get("gender");
+            
+            // Calculate age
+            let age = chrono::Utc::now().naive_utc().date()
+                .signed_duration_since(dob)
+                .num_days() / 365;
+            
+            // Get all active rules for this service
+            let rules = client.query(
+                "SELECT rule_type, rule_value, rule_value_numeric, description
+                 FROM service_rules
+                 WHERE service_id = $1 AND is_active = TRUE",
+                &[&service_id],
+            ).await?;
+            
+            let mut failed_rules: Vec<String> = Vec::new();
+            
+            for rule in rules {
+                let rule_type: String = rule.get("rule_type");
+                let rule_value: Option<String> = rule.get("rule_value");
+                let rule_value_numeric: Option<i32> = rule.get("rule_value_numeric");
+                
+                match rule_type.as_str() {
+                    "age_min" => {
+                        if let Some(min_age) = rule_value_numeric {
+                            if age < min_age {
+                                failed_rules.push(format!("AGE_MIN({})", min_age));
+                            }
+                        }
+                    }
+                    "age_max" => {
+                        if let Some(max_age) = rule_value_numeric {
+                            if age > max_age {
+                                failed_rules.push(format!("AGE_MAX({})", max_age));
+                            }
+                        }
+                    }
+                    "gender_required" => {
+                        if let Some(required_gender) = rule_value {
+                            if required_gender != "ANY" {
+                                let matches = match required_gender.as_str() {
+                                    "M" => gender.as_ref().map_or(false, |g| g == "Male"),
+                                    "F" => gender.as_ref().map_or(false, |g| g == "Female"),
+                                    _ => true,
+                                };
+                                if !matches {
+                                    failed_rules.push(format!("GENDER({})", required_gender));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            if failed_rules.is_empty() {
+                Ok((true, "Patient eligible for service".to_string(), failed_rules))
+            } else {
+                Ok((false, "Patient does not meet service requirements".to_string(), failed_rules))
+            }
+        }
+        None => Ok((false, "Patient not found".to_string(), vec!["INVALID_PATIENT".to_string()])),
+    }
+}
+
+// Get available services for a patient
+pub async fn get_available_services_for_patient(
+    pool: &Pool,
+    patient_id: Uuid,
+) -> Result<Vec<crate::models::AvailableServiceResponse>, Box<dyn std::error::Error>> {
+    let client = pool.get().await?;
+    
+    // Get patient info once
+    let patient_row = client.query_opt(
+        "SELECT date_of_birth, gender FROM patients WHERE id = $1",
+        &[&patient_id],
+    ).await?;
+    
+    let (age, gender): (i64, Option<String>) = match patient_row {
+        Some(row) => {
+            let dob: NaiveDate = row.get("date_of_birth");
+            let age = chrono::Utc::now().naive_utc().date()
+                .signed_duration_since(dob)
+                .num_days() / 365;
+            let gender: Option<String> = row.get("gender");
+            (age, gender)
+        }
+        None => return Err("Patient not found".into()),
+    };
+    
+    // Get all services with their rules
+    let rows = client.query(
+        "SELECT s.id, s.name, s.description, s.duration_minutes, s.price, s.category
+         FROM services s
+         ORDER BY s.name",
+        &[],
+    ).await?;
+    
+    let mut services: Vec<crate::models::AvailableServiceResponse> = Vec::new();
+    
+    for row in rows {
+        let service_id: Uuid = row.get("id");
+        let service_name: String = row.get("name");
+        let description: Option<String> = row.get("description");
+        let duration_minutes: i32 = row.get("duration_minutes");
+        let price: Option<rust_decimal::Decimal> = row.get("price");
+        let category: Option<String> = row.get("category");
+        
+        // Check eligibility
+        let rules = client.query(
+            "SELECT rule_type, rule_value, rule_value_numeric
+             FROM service_rules
+             WHERE service_id = $1 AND is_active = TRUE",
+            &[&service_id],
+        ).await?;
+        
+        let mut eligible = true;
+        let mut failed_rules: Vec<String> = Vec::new();
+        
+        for rule in rules {
+            let rule_type: String = rule.get("rule_type");
+            let rule_value: Option<String> = rule.get("rule_value");
+            let rule_value_numeric: Option<i32> = rule.get("rule_value_numeric");
+            
+            match rule_type.as_str() {
+                "age_min" => {
+                    if let Some(min_age) = rule_value_numeric {
+                        if age < min_age {
+                            eligible = false;
+                            failed_rules.push(format!("Minimum age {} required", min_age));
+                        }
+                    }
+                }
+                "age_max" => {
+                    if let Some(max_age) = rule_value_numeric {
+                        if age > max_age {
+                            eligible = false;
+                            failed_rules.push(format!("Maximum age {} allowed", max_age));
+                        }
+                    }
+                }
+                "gender_required" => {
+                    if let Some(required_gender) = rule_value {
+                        if required_gender != "ANY" {
+                            let matches = match required_gender.as_str() {
+                                "M" => gender.as_ref().map_or(false, |g| g == "Male"),
+                                "F" => gender.as_ref().map_or(false, |g| g == "Female"),
+                                _ => true,
+                            };
+                            if !matches {
+                                eligible = false;
+                                failed_rules.push(format!("Gender {} required", required_gender));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        let reason = if eligible {
+            "Eligible".to_string()
+        } else {
+            failed_rules.join(", ")
+        };
+        
+        services.push(crate::models::AvailableServiceResponse {
+            service_id,
+            service_name,
+            description,
+            duration_minutes,
+            price,
+            category,
+            eligibility_status: eligible,
+            eligibility_reason: reason,
+        });
+    }
+    
+    Ok(services)
+}
